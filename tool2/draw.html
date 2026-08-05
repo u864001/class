@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Tool 2 繪圖測試 (完整版)</title>
+
+  <!-- tldraw 官方樣式 -->
+  <link rel="stylesheet" href="https://unpkg.com/tldraw@2/tldraw.css" />
+
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #f0f4f9;
+      padding: 20px;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0 16px 0;
+      flex-shrink: 0;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .header h1 { font-size: 20px; color: #0b2b4a; }
+    .btn-group { display: flex; gap: 10px; flex-wrap: wrap; }
+    .btn {
+      padding: 8px 20px; border: none; border-radius: 30px;
+      font-weight: 600; font-size: 14px; cursor: pointer; transition: 0.2s;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .btn-primary { background: #1a5c9e; color: white; }
+    .btn-primary:hover { background: #12447a; }
+    .btn-success { background: #1f8b5c; color: white; }
+    .btn-success:hover { background: #16734a; }
+    .btn-danger { background: #c73d3d; color: white; }
+    .btn-danger:hover { background: #a82e2e; }
+    .btn-outline { background: transparent; border: 2px solid #1a5c9e; color: #1a5c9e; }
+    .btn-outline:hover { background: #1a5c9e; color: white; }
+
+    #canvas-container {
+      flex: 1; min-height: 400px; border: 2px solid #d7e0e9;
+      border-radius: 16px; overflow: hidden; background: white; position: relative;
+    }
+    #status {
+      flex-shrink: 0; padding: 10px 16px; background: #e9f1fa;
+      border-radius: 12px; margin-top: 12px; font-size: 14px; color: #1a3a5a;
+    }
+    .loading { color: #d68d2c; }
+    .ready { color: #1f8b5c; }
+    .hidden { display: none !important; }
+
+    @media (max-width: 600px) {
+      body { padding: 12px; }
+      .header h1 { font-size: 16px; }
+      .btn { font-size: 12px; padding: 6px 14px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <h1>🎨 Tool 2 繪圖測試 (完整版)</h1>
+    <div class="btn-group">
+      <button class="btn btn-primary" id="loadImageBtn">📷 載入底圖</button>
+      <button class="btn btn-success" id="exportBtn">📤 匯出 PNG</button>
+      <button class="btn btn-danger" id="clearBtn">🗑️ 清除畫記</button>
+      <input type="file" id="bgInput" accept="image/*" style="display:none" />
+    </div>
+  </div>
+
+  <div id="canvas-container"></div>
+
+  <div id="status">
+    <span id="statusText" class="loading">⏳ 正在載入 tldraw...</span>
+  </div>
+
+  <!-- ===== 使用 ES Module 載入 tldraw ===== -->
+  <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@18.2.0",
+        "react/jsx-runtime": "https://esm.sh/react@18.2.0/jsx-runtime",
+        "react-dom": "https://esm.sh/react-dom@18.2.0",
+        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+        "tldraw": "https://esm.sh/tldraw@2?external=react,react-dom"
+      }
+    }
+  </script>
+
+  <script type="module">
+    // ============================================================
+    // 載入 React 與 tldraw
+    // ============================================================
+    import React, { useCallback, useEffect, useState } from 'react';
+    import { createRoot } from 'react-dom/client';
+    import { Tldraw, useEditor } from 'tldraw';
+
+    // ----- DOM 參照 -----
+    const statusText = document.getElementById('statusText');
+    const loadBtn = document.getElementById('loadImageBtn');
+    const bgInput = document.getElementById('bgInput');
+    const exportBtn = document.getElementById('exportBtn');
+    const clearBtn = document.getElementById('clearBtn');
+
+    // ----- 全域變數 -----
+    let editorInstance = null;
+    let bgShapeId = null;
+
+    // ----- 更新狀態 -----
+    function setStatus(msg, type = 'loading') {
+      statusText.textContent = msg;
+      statusText.className = type;
+    }
+
+    // ----- 自訂元件：擷取 editor 實例 -----
+    function EditorWrapper() {
+      const editor = useEditor();
+
+      useEffect(() => {
+        editorInstance = editor;
+        setStatus('✅ tldraw 已就緒，可以使用工具列繪圖', 'ready');
+        console.log('Editor 已初始化');
+      }, [editor]);
+
+      return null;
+    }
+
+    // ----- 主元件 -----
+    function App() {
+      return React.createElement(
+        React.Fragment,
+        null,
+        React.createElement(Tldraw, { key: 'tldraw' }),
+        React.createElement(EditorWrapper, { key: 'wrapper' })
+      );
+    }
+
+    // ----- 渲染 -----
+    const container = document.getElementById('canvas-container');
+    const root = createRoot(container);
+    root.render(React.createElement(App));
+
+    // ============================================================
+    // 功能：載入底圖
+    // ============================================================
+    loadBtn.addEventListener('click', () => {
+      bgInput.click();
+    });
+
+    bgInput.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      if (!editorInstance) {
+        alert('請等待 tldraw 載入完成');
+        return;
+      }
+
+      try {
+        setStatus('📷 正在載入底圖...', 'loading');
+
+        const reader = new FileReader();
+        reader.onload = async (ev) => {
+          const dataUrl = ev.target.result;
+
+          // 取得圖片尺寸
+          const img = new Image();
+          img.onload = async () => {
+            const w = img.width;
+            const h = img.height;
+
+            try {
+              // 1. 建立 Asset
+              const assetId = editorInstance.createAsset({
+                type: 'image',
+                props: {
+                  name: '底圖',
+                  src: dataUrl,
+                  w: w,
+                  h: h,
+                },
+              });
+
+              // 2. 建立圖片形狀（置中）
+              const center = editorInstance.getViewportScreenBounds();
+              const shapeId = editorInstance.createShape({
+                type: 'image',
+                x: (center.width - w) / 2,
+                y: (center.height - h) / 2,
+                props: {
+                  assetId: assetId,
+                  w: w,
+                  h: h,
+                },
+              });
+
+              // 3. 鎖定底圖（防止移動/刪除）
+              editorInstance.updateShape({
+                id: shapeId,
+                type: 'image',
+                isLocked: true,
+              });
+
+              bgShapeId = shapeId;
+              setStatus(`✅ 底圖已載入 (${file.name})，請開始繪圖`, 'ready');
+            } catch (err) {
+              setStatus('❌ 載入失敗：' + err.message, 'loading');
+              console.error(err);
+            }
+          };
+          img.src = dataUrl;
+        };
+        reader.readAsDataURL(file);
+        bgInput.value = '';
+      } catch (err) {
+        setStatus('❌ 載入失敗：' + err.message, 'loading');
+        console.error(err);
+      }
+    });
+
+    // ============================================================
+    // 功能：匯出 PNG
+    // ============================================================
+    exportBtn.addEventListener('click', async () => {
+      if (!editorInstance) {
+        alert('請等待 tldraw 載入完成');
+        return;
+      }
+
+      try {
+        setStatus('📤 正在匯出...', 'loading');
+        const blob = await editorInstance.exportAs('png', {
+          format: 'png',
+          quality: 1,
+          includeBackground: true,
+        });
+
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `繪圖作品_${Date.now()}.png`;
+        link.click();
+        URL.revokeObjectURL(link.href);
+
+        setStatus('✅ 圖片已匯出下載', 'ready');
+      } catch (err) {
+        setStatus('❌ 匯出失敗：' + err.message, 'loading');
+        console.error(err);
+      }
+    });
+
+    // ============================================================
+    // 功能：清除畫記（保留底圖）
+    // ============================================================
+    clearBtn.addEventListener('click', async () => {
+      if (!editorInstance) {
+        alert('請等待 tldraw 載入完成');
+        return;
+      }
+
+      try {
+        const shapes = editorInstance.getShapes();
+        const toDelete = shapes.filter(s => s.id !== bgShapeId);
+
+        if (toDelete.length === 0) {
+          setStatus('ℹ️ 沒有需要清除的畫記', 'ready');
+          return;
+        }
+
+        editorInstance.deleteShapes(toDelete.map(s => s.id));
+        setStatus(`🗑️ 已清除 ${toDelete.length} 個畫記`, 'ready');
+      } catch (err) {
+        setStatus('❌ 清除失敗：' + err.message, 'loading');
+        console.error(err);
+      }
+    });
+
+    console.log('🎨 Tool 2 完整版已啟動');
+  </script>
+</body>
+</html>
