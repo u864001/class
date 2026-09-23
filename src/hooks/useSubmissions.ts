@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { Submission } from '../types';
 
 export function useSubmissions(roomId: string | null, roundId: string | null) {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(false);
+  const isSubmittingRef = useRef<boolean>(false);
 
   const fetchSubmissions = useCallback(async () => {
     if (!roomId || !roundId) {
@@ -33,6 +34,28 @@ export function useSubmissions(roomId: string | null, roundId: string | null) {
     fetchSubmissions();
   }, [fetchSubmissions]);
 
+  // iPad 休眠喚醒或網路重連時，主動重新同步作答名單與狀態
+  useEffect(() => {
+    const handleWakeSync = () => {
+      if (document.visibilityState === 'visible' && roomId && roundId) {
+        fetchSubmissions();
+      }
+    };
+    const handleOnlineSync = () => {
+      if (roomId && roundId) {
+        fetchSubmissions();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleWakeSync);
+    window.addEventListener('online', handleOnlineSync);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleWakeSync);
+      window.removeEventListener('online', handleOnlineSync);
+    };
+  }, [fetchSubmissions, roomId, roundId]);
+
   // Realtime subscription for submissions
   useEffect(() => {
     if (!roomId || !roundId) return;
@@ -53,7 +76,9 @@ export function useSubmissions(roomId: string | null, roundId: string | null) {
             const newSub = payload.new as Submission;
             if (newSub.round_id === roundId) {
               setSubmissions((prev) => {
-                if (prev.some((s) => s.id === newSub.id)) return prev;
+                if (prev.some((s) => s.id === newSub.id || s.student_id === newSub.student_id)) {
+                  return prev.map((s) => (s.student_id === newSub.student_id ? newSub : s));
+                }
                 return [...prev, newSub];
               });
             }
@@ -86,7 +111,7 @@ export function useSubmissions(roomId: string | null, roundId: string | null) {
     return map;
   }, [submissions]);
 
-  // Submit answer (from student)
+  // Submit answer (from student with strict deduplication & score protection)
   const submitAnswer = async (submission: {
     student_id: string;
     student_name: string;
@@ -96,23 +121,41 @@ export function useSubmissions(roomId: string | null, roundId: string | null) {
   }) => {
     if (!roomId || !roundId) return;
 
-    const { error } = await supabase.from('submissions').upsert(
-      {
-        room_id: roomId.toUpperCase(),
-        round_id: roundId,
-        student_id: submission.student_id,
-        student_name: submission.student_name,
-        choice: submission.choice || null,
-        text_answer: submission.text_answer || null,
-        image_url: submission.image_url || null,
-        created_at: new Date().toISOString(),
-      },
-      { onConflict: 'room_id, round_id, student_id' }
-    );
+    // 防止學生連續快點兩次造成並發寫入衝突
+    if (isSubmittingRef.current) {
+      console.warn('作答送出中，請勿重複點擊');
+      return;
+    }
 
-    if (error) {
-      console.error('Error submitting answer:', error);
-      throw error;
+    try {
+      isSubmittingRef.current = true;
+
+      // 嚴格規範學生送出資料結構，不傳入 earned_score（由後端預設或教師批改）
+      const { error } = await supabase.from('submissions').upsert(
+        {
+          room_id: roomId.toUpperCase(),
+          round_id: roundId,
+          student_id: submission.student_id,
+          student_name: submission.student_name,
+          choice: submission.choice || null,
+          text_answer: submission.text_answer || null,
+          image_url: submission.image_url || null,
+          created_at: new Date().toISOString(),
+        },
+        { onConflict: 'room_id, round_id, student_id' }
+      );
+
+      if (error) {
+        console.error('Error submitting answer:', error);
+        throw error;
+      }
+
+      // 送出成功後主動重新拉取，確保本地狀態即時吻合
+      await fetchSubmissions();
+    } finally {
+      setTimeout(() => {
+        isSubmittingRef.current = false;
+      }, 500);
     }
   };
 

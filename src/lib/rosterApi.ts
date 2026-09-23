@@ -6,7 +6,8 @@ const LOCAL_STORAGE_ROSTER_KEY = 'classqna_custom_roster';
 const LOCAL_STORAGE_SCHOOL_NAME_KEY = 'classqna_school_name';
 const LOCAL_STORAGE_ADMIN_PW_KEY = 'classqna_admin_password';
 
-export const DEFAULT_ADMIN_PASSWORD = 'wt7902230';
+export const DEFAULT_ADMIN_PASSWORD =
+  (import.meta.env.VITE_ADMIN_PASSWORD as string) || 'wt7902230_sec';
 export const DEFAULT_SCHOOL_NAME = '霧臺國小';
 
 export function getStoredSchoolName(): string {
@@ -28,7 +29,11 @@ export function setStoredSchoolName(name: string): void {
 
 export function getAdminPassword(): string {
   try {
-    return localStorage.getItem(LOCAL_STORAGE_ADMIN_PW_KEY) || DEFAULT_ADMIN_PASSWORD;
+    return (
+      localStorage.getItem(LOCAL_STORAGE_ADMIN_PW_KEY) ||
+      (import.meta.env.VITE_ADMIN_PASSWORD as string) ||
+      DEFAULT_ADMIN_PASSWORD
+    );
   } catch {
     return DEFAULT_ADMIN_PASSWORD;
   }

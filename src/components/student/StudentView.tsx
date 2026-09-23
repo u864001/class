@@ -44,8 +44,11 @@ export const StudentView: React.FC<StudentViewProps> = ({
   studentName,
   onLeave,
 }) => {
-  const { room, loading } = useRoom(roomId);
-  const { submissionMap, submitAnswer } = useSubmissions(roomId, room?.current_round_id || null);
+  const { room, loading, connectionStatus } = useRoom(roomId);
+  const { submissionMap, submitAnswer, refresh: refreshSubmissions } = useSubmissions(
+    roomId,
+    room?.current_round_id || null
+  );
 
   const [selectedChoice, setSelectedChoice] = useState<string | null>(null);
   const [textAnswer, setTextAnswer] = useState('');
@@ -105,6 +108,15 @@ export const StudentView: React.FC<StudentViewProps> = ({
       setZoomLevel(1);
     }
   }, [room?.broadcast_image_url]);
+
+  // 背景預先載入全部講義圖片至快取，學生翻頁 0 延遲且完全不消耗重複下載流量
+  useEffect(() => {
+    if (!deck?.slides || deck.slides.length === 0) return;
+    deck.slides.forEach((url) => {
+      const img = new Image();
+      img.src = url;
+    });
+  }, [deck?.slides]);
 
 
 
@@ -227,6 +239,28 @@ export const StudentView: React.FC<StudentViewProps> = ({
         </div>
 
         <div className="flex items-center space-x-2">
+          {/* Connection status indicator */}
+          <div className="flex items-center text-[10px] font-semibold">
+            {connectionStatus === 'connected' && (
+              <span className="flex items-center space-x-1 text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="hidden sm:inline">已連線</span>
+              </span>
+            )}
+            {connectionStatus === 'connecting' && (
+              <span className="flex items-center space-x-1 text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200 animate-pulse">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                <span>同步中</span>
+              </span>
+            )}
+            {connectionStatus === 'offline' && (
+              <span className="flex items-center space-x-1 text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                <span>離線中</span>
+              </span>
+            )}
+          </div>
+
           <span className="text-xs font-bold px-2.5 py-1 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100">
             {room.cumulative_scores?.[studentId] || 0} 分
           </span>

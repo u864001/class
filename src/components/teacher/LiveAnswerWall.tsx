@@ -1,5 +1,5 @@
-import React from 'react';
-import { Play, Square, Plus, ArrowRight, CheckCircle, Clock, Users, Sparkles } from 'lucide-react';
+import React, { useState } from 'react';
+import { Play, Square, Plus, ArrowRight, CheckCircle, Clock, Users, Sparkles, UserX, Copy, Check, Filter, X } from 'lucide-react';
 import { Room, RoomStudent, Submission } from '../../types';
 import { useSyncTimer } from '../../hooks/useSyncTimer';
 
@@ -26,6 +26,9 @@ export const LiveAnswerWall: React.FC<LiveAnswerWallProps> = ({
 }) => {
   const isAnswering = room.status === 'answering';
   const isStopped = room.status === 'stopped';
+  const [filterMode, setFilterMode] = useState<'all' | 'unsubmitted'>('all');
+  const [showUnsubmittedDrawer, setShowUnsubmittedDrawer] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   // Server-synced timer
   const remainingSeconds = useSyncTimer(
@@ -54,6 +57,9 @@ export const LiveAnswerWall: React.FC<LiveAnswerWallProps> = ({
   const submittedCount = submissions.length;
   const progressPercent = totalSeats > 0 ? Math.round((submittedCount / totalSeats) * 100) : 0;
 
+  const unsubmittedSeats = seats.filter((s) => !s.isSubmitted);
+  const displayedSeats = filterMode === 'unsubmitted' ? unsubmittedSeats : seats;
+
   return (
     <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
       {/* Top Controls & Status Bar */}
@@ -74,20 +80,31 @@ export const LiveAnswerWall: React.FC<LiveAnswerWallProps> = ({
             <h2 className="text-xl sm:text-2xl font-bold text-slate-800 mt-1">
               {room.question_note || `請進行第 ${room.current_question_num} 題作答`}
             </h2>
-            {/* Live Counter */}
-            <div className="flex items-center space-x-4 mt-3">
+            {/* Live Counter & Unsubmitted Pill */}
+            <div className="flex flex-wrap items-center gap-3 mt-3">
               <div className="flex items-center space-x-1.5 text-xs sm:text-sm font-semibold text-slate-600">
                 <Users className="w-4 h-4 text-indigo-500" />
                 <span>已繳交：</span>
                 <span className="text-emerald-600 font-bold text-base">{submittedCount}</span>
                 <span className="text-slate-400">/ {totalSeats} 人 ({progressPercent}%)</span>
               </div>
-              <div className="w-36 h-2 rounded-full bg-slate-100 overflow-hidden hidden sm:block">
+              <div className="w-28 sm:w-36 h-2 rounded-full bg-slate-100 overflow-hidden hidden sm:block">
                 <div
                   className="h-full bg-gradient-to-r from-indigo-500 to-emerald-500 transition-all duration-500"
                   style={{ width: `${progressPercent}%` }}
                 />
               </div>
+
+              {/* Unsubmitted List Button */}
+              {unsubmittedSeats.length > 0 && (
+                <button
+                  onClick={() => setShowUnsubmittedDrawer(true)}
+                  className="px-2.5 py-1 rounded-full bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 text-xs font-bold transition flex items-center space-x-1 shadow-xs active:scale-95"
+                >
+                  <UserX className="w-3.5 h-3.5 text-amber-600" />
+                  <span>未交卷名單 ({unsubmittedSeats.length}人)</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -153,11 +170,38 @@ export const LiveAnswerWall: React.FC<LiveAnswerWallProps> = ({
 
       {/* Student Cards Grid (Real-time Feedback Wall) */}
       <div>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-bold text-slate-700 text-sm sm:text-base flex items-center space-x-2">
-            <span>全班即時作答進度牆</span>
-            <span className="text-xs font-normal text-slate-400">（學生送出答案即刻亮起綠燈）</span>
-          </h3>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <div className="flex items-center space-x-3">
+            <h3 className="font-bold text-slate-700 text-sm sm:text-base flex items-center space-x-2">
+              <span>全班即時作答進度牆</span>
+              <span className="text-xs font-normal text-slate-400 hidden sm:inline">（學生送出答案即刻亮起綠燈）</span>
+            </h3>
+
+            {/* Filter Toggle */}
+            <div className="flex items-center bg-slate-100 p-0.5 rounded-xl text-xs font-bold">
+              <button
+                onClick={() => setFilterMode('all')}
+                className={`px-2.5 py-1 rounded-lg transition ${
+                  filterMode === 'all'
+                    ? 'bg-white text-indigo-600 shadow-xs'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                全部 ({seats.length})
+              </button>
+              <button
+                onClick={() => setFilterMode('unsubmitted')}
+                className={`px-2.5 py-1 rounded-lg transition ${
+                  filterMode === 'unsubmitted'
+                    ? 'bg-amber-500 text-white shadow-xs'
+                    : 'text-slate-500 hover:text-amber-600'
+                }`}
+              >
+                未交卷 ({unsubmittedSeats.length})
+              </button>
+            </div>
+          </div>
+
           <div className="flex items-center space-x-3 text-xs text-slate-500">
             <span className="flex items-center space-x-1">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />
@@ -175,7 +219,7 @@ export const LiveAnswerWall: React.FC<LiveAnswerWallProps> = ({
         </div>
 
         <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-3">
-          {seats.map((seat) => {
+          {displayedSeats.map((seat) => {
             const hasSub = seat.isSubmitted;
             const sub = seat.submission;
             return (
@@ -227,6 +271,88 @@ export const LiveAnswerWall: React.FC<LiveAnswerWallProps> = ({
           })}
         </div>
       </div>
+
+      {/* Unsubmitted Students Drawer / Modal */}
+      {showUnsubmittedDrawer && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-100 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div className="flex items-center space-x-2">
+                <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center">
+                  <UserX className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-800">尚未交卷學生名單</h4>
+                  <p className="text-xs text-slate-400">目前共 {unsubmittedSeats.length} 位同學尚未送出</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowUnsubmittedDrawer(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-xl"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* List */}
+            <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1">
+              {unsubmittedSeats.length === 0 ? (
+                <div className="text-center py-6 text-emerald-600 font-bold text-sm">
+                  🎉 太棒了！全班同學皆已完成作答！
+                </div>
+              ) : (
+                unsubmittedSeats.map((seat) => (
+                  <div
+                    key={seat.seatNum}
+                    className="flex items-center justify-between px-3 py-2 rounded-xl bg-amber-50/60 border border-amber-100 text-xs"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <span className="font-mono font-bold text-amber-700 bg-amber-100/70 px-1.5 py-0.5 rounded">
+                        #{seat.seatNum}
+                      </span>
+                      <span className="font-bold text-slate-700">{seat.name}</span>
+                    </div>
+                    <div>
+                      {seat.isOnline ? (
+                        <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
+                          🟢 連線中未送出
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-semibold text-slate-400 bg-slate-50 px-2 py-0.5 rounded-full border border-slate-200">
+                          ⚪ 離線/未加入
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center justify-between pt-2 border-t">
+              <button
+                onClick={() => {
+                  const text = unsubmittedSeats.map((s) => `${s.seatNum}號 ${s.name}`).join('、');
+                  navigator.clipboard.writeText(`未交卷學生（${unsubmittedSeats.length}人）：${text}`);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                }}
+                className="px-3 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold transition flex items-center space-x-1.5 shadow-xs"
+              >
+                {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
+                <span>{copied ? '已複製名單！' : '複製未交名單'}</span>
+              </button>
+
+              <button
+                onClick={() => setShowUnsubmittedDrawer(false)}
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition"
+              >
+                關閉
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

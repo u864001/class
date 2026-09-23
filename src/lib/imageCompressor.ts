@@ -27,6 +27,7 @@ export async function compressAndUploadCanvas(
           .from('class_assets')
           .upload(filePath, blob, {
             contentType: 'image/webp',
+            cacheControl: '3600',
             upsert: true,
           });
 
@@ -167,6 +168,7 @@ export async function captureAndUploadScreenSnapshot(roomId: string): Promise<st
               .from('class_assets')
               .upload(filePath, blob, {
                 contentType: 'image/webp',
+                cacheControl: '3600',
                 upsert: true,
               });
 
@@ -254,6 +256,7 @@ export async function captureScreenSlide(roomId: string, slideIndex: number): Pr
               .from('class_assets')
               .upload(filePath, blob, {
                 contentType: 'image/webp',
+                cacheControl: '3600',
                 upsert: true,
               });
 

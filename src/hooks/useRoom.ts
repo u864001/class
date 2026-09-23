@@ -8,6 +8,11 @@ export function useRoom(roomId: string | null) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Connection state
+  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'connecting' | 'offline'>(
+    navigator.onLine ? 'connecting' : 'offline'
+  );
+
   // 1. Fetch initial room state & students
   const fetchRoom = useCallback(async () => {
     if (!roomId) {
@@ -45,6 +50,37 @@ export function useRoom(roomId: string | null) {
   useEffect(() => {
     fetchRoom();
   }, [fetchRoom]);
+
+  // iPad 休眠喚醒或斷線重連監聽：自動拉取最新教室狀態
+  useEffect(() => {
+    const handleWakeSync = () => {
+      if (document.visibilityState === 'visible' && roomId) {
+        setConnectionStatus('connecting');
+        fetchRoom().then(() => setConnectionStatus('connected'));
+      }
+    };
+
+    const handleOnline = () => {
+      setConnectionStatus('connecting');
+      if (roomId) {
+        fetchRoom().then(() => setConnectionStatus('connected'));
+      }
+    };
+
+    const handleOffline = () => {
+      setConnectionStatus('offline');
+    };
+
+    document.addEventListener('visibilitychange', handleWakeSync);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleWakeSync);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [fetchRoom, roomId]);
 
   // 2. Realtime subscription for Room and Students
   useEffect(() => {
@@ -85,7 +121,17 @@ export function useRoom(roomId: string | null) {
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          setConnectionStatus('connected');
+        } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          if (navigator.onLine) {
+            setConnectionStatus('connecting');
+          } else {
+            setConnectionStatus('offline');
+          }
+        }
+      });
 
     return () => {
       supabase.removeChannel(channel);
@@ -121,6 +167,7 @@ export function useRoom(roomId: string | null) {
     students,
     loading,
     error,
+    connectionStatus,
     refresh: fetchRoom,
     updateRoomState,
     markStudentOnline,
