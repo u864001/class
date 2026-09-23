@@ -2,30 +2,165 @@ import { ClassRosterStudent } from '../types';
 import defaultRoster from '../data/roster.json';
 import { supabase } from './supabase';
 
+const LOCAL_STORAGE_ROSTER_KEY = 'classqna_custom_roster';
+const LOCAL_STORAGE_SCHOOL_NAME_KEY = 'classqna_school_name';
+const LOCAL_STORAGE_ADMIN_PW_KEY = 'classqna_admin_password';
+
+export const DEFAULT_ADMIN_PASSWORD = 'wt7902230';
+export const DEFAULT_SCHOOL_NAME = '霧臺國小';
+
+export function getStoredSchoolName(): string {
+  try {
+    return localStorage.getItem(LOCAL_STORAGE_SCHOOL_NAME_KEY) || DEFAULT_SCHOOL_NAME;
+  } catch {
+    return DEFAULT_SCHOOL_NAME;
+  }
+}
+
+export function setStoredSchoolName(name: string): void {
+  try {
+    localStorage.setItem(LOCAL_STORAGE_SCHOOL_NAME_KEY, name.trim() || DEFAULT_SCHOOL_NAME);
+    window.dispatchEvent(new Event('school-name-changed'));
+  } catch (e) {
+    console.warn('Failed to save school name:', e);
+  }
+}
+
+export function getAdminPassword(): string {
+  try {
+    return localStorage.getItem(LOCAL_STORAGE_ADMIN_PW_KEY) || DEFAULT_ADMIN_PASSWORD;
+  } catch {
+    return DEFAULT_ADMIN_PASSWORD;
+  }
+}
+
+export function setAdminPassword(pw: string): void {
+  try {
+    localStorage.setItem(LOCAL_STORAGE_ADMIN_PW_KEY, pw.trim() || DEFAULT_ADMIN_PASSWORD);
+  } catch (e) {
+    console.warn('Failed to save admin password:', e);
+  }
+}
+
+/**
+ * 取得管理員當前自訂的名單（本地存儲）
+ */
+export function getCustomRoster(): ClassRosterStudent[] {
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_ROSTER_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.warn('Error reading custom roster from storage:', e);
+  }
+  return defaultRoster as ClassRosterStudent[];
+}
+
+/**
+ * 儲存管理員編修的名單：
+ * 1. 立即寫入本地持久化存儲（0ms 生效，離線可用）
+ * 2. 嘗試同步至 Supabase roster 表（若已建表）
+ */
+export async function saveCustomRoster(
+  students: ClassRosterStudent[]
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    // 1. 寫入 LocalStorage
+    localStorage.setItem(LOCAL_STORAGE_ROSTER_KEY, JSON.stringify(students));
+    window.dispatchEvent(new Event('roster-changed'));
+
+    // 2. 嘗試同步至 Supabase（非阻塞背景同步）
+    try {
+      const { error: delError } = await supabase
+        .from('roster')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000');
+
+      if (!delError) {
+        const { error: insError } = await supabase.from('roster').insert(students);
+        if (insError) {
+          console.warn('Supabase roster insert notice:', insError.message);
+        }
+      }
+    } catch (dbErr) {
+      console.warn('Supabase sync skipped (table might not exist yet):', dbErr);
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Failed to save custom roster:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * 一鍵還原回 115 學年度預設 101 人名單
+ */
+export async function resetToDefaultRoster(): Promise<{ success: boolean }> {
+  try {
+    localStorage.removeItem(LOCAL_STORAGE_ROSTER_KEY);
+    window.dispatchEvent(new Event('roster-changed'));
+
+    try {
+      await supabase.from('roster').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('roster').insert(defaultRoster);
+    } catch {
+      // Ignore if table not created
+    }
+
+    return { success: true };
+  } catch (e) {
+    console.warn('Error resetting roster:', e);
+    return { success: false };
+  }
+}
+
+/**
+ * 匯出全校名單為 JSON 備份檔
+ */
+export function exportRosterToJson(students?: ClassRosterStudent[]): void {
+  const data = students || getCustomRoster();
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `roster_backup_${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 /**
  * 極速載入全校學生名單：
- * 1. 優先使用本地乾淨名單（0ms 秒開，無個資洩漏風險）
- * 2. 若 Supabase 建有 roster 表，自動同步最新雲端名單
+ * 1. 優先使用本地快取的自訂名單（0ms 秒開，無個資洩漏風險）
+ * 2. 若有 Supabase roster 表，嘗試同步雲端更新
+ * 3. 預設使用內建 101 位學生名單
  */
 export async function fetchRoster(): Promise<{
   rosterByClass: Record<string, ClassRosterStudent[]>;
   allStudents: ClassRosterStudent[];
 }> {
-  let rawList: ClassRosterStudent[] = defaultRoster as ClassRosterStudent[];
+  // 1. 檢查本地自訂名單
+  let rawList: ClassRosterStudent[] = getCustomRoster();
 
-  // 嘗試從 Supabase 讀取（若使用者有建立 roster 資料表）
-  try {
-    const { data, error } = await supabase
-      .from('roster')
-      .select('grade, class, number, name')
-      .order('grade', { ascending: true })
-      .order('class', { ascending: true });
+  // 2. 若本地未曾手動覆寫，嘗試從 Supabase 讀取雲端名單
+  if (!localStorage.getItem(LOCAL_STORAGE_ROSTER_KEY)) {
+    try {
+      const { data, error } = await supabase
+        .from('roster')
+        .select('grade, class, number, name')
+        .order('grade', { ascending: true })
+        .order('class', { ascending: true });
 
-    if (!error && data && data.length > 0) {
-      rawList = data as ClassRosterStudent[];
+      if (!error && data && data.length > 0) {
+        rawList = data as ClassRosterStudent[];
+      }
+    } catch {
+      // 順暢降級至內建名單
     }
-  } catch {
-    // 若尚未在 Supabase 建表，直接順暢使用本地最新名單，毫秒級秒開
   }
 
   const rosterByClass: Record<string, ClassRosterStudent[]> = {};
@@ -71,22 +206,4 @@ export function formatClassLabel(classKey: string): string {
   return `${gradeMap[grade] || grade + '年'}${classMap[cls] || cls + '班'}`;
 }
 
-/**
- * 將本地 101 位學生名單一鍵推送到 Supabase roster 表
- */
-export async function pushRosterToSupabase(): Promise<{
-  success: boolean;
-  count?: number;
-  error?: string;
-}> {
-  try {
-    // 清空舊名單並批次寫入
-    await supabase.from('roster').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-    const { error } = await supabase.from('roster').insert(defaultRoster);
-    if (error) throw error;
-    return { success: true, count: defaultRoster.length };
-  } catch (err: any) {
-    return { success: false, error: err.message };
-  }
-}
 

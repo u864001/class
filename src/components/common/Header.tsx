@@ -1,6 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Sparkles, Users, Copy, Check, LogOut, ShieldAlert } from 'lucide-react';
 import { Room } from '../../types';
+import { AdminAuthModal } from '../admin/AdminAuthModal';
+import { AdminModal } from '../admin/AdminModal';
+import { getStoredSchoolName } from '../../lib/rosterApi';
 
 interface HeaderProps {
   room?: Room | null;
@@ -17,7 +20,42 @@ export const Header: React.FC<HeaderProps> = ({
   onSwitchRole,
   onExitRoom,
 }) => {
-  const [copied, setCopied] = React.useState(false);
+  const [copied, setCopied] = useState(false);
+  const [schoolName, setSchoolName] = useState(getStoredSchoolName());
+
+  // Hidden admin console triggers
+  const [clickCount, setClickCount] = useState(0);
+  const [lastClickTime, setLastClickTime] = useState(0);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showAdminModal, setShowAdminModal] = useState(false);
+
+  // Sync school name changes
+  useEffect(() => {
+    const handleNameChange = () => {
+      setSchoolName(getStoredSchoolName());
+    };
+    window.addEventListener('school-name-changed', handleNameChange);
+    return () => window.removeEventListener('school-name-changed', handleNameChange);
+  }, []);
+
+  const handleTitleClick = () => {
+    const now = Date.now();
+    // 兩秒半內連續點擊
+    if (now - lastClickTime > 2500) {
+      setClickCount(1);
+      setLastClickTime(now);
+      return;
+    }
+
+    const nextCount = clickCount + 1;
+    setLastClickTime(now);
+    setClickCount(nextCount);
+
+    if (nextCount >= 5) {
+      setClickCount(0);
+      setShowAuthModal(true);
+    }
+  };
 
   const copyRoomCode = () => {
     if (!room) return;
@@ -27,28 +65,36 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header className="sticky top-0 z-40 w-full glass-panel border-b border-white/40 shadow-xs">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-        {/* Left: Brand / School Logo */}
-        <div className="flex items-center space-x-3">
-          <img
-            src="/logo.jpg"
-            alt="School Logo"
-            className="w-9 h-9 rounded-xl object-cover shadow-xs border border-white/60"
-            onError={(e) => {
-              (e.target as HTMLElement).style.display = 'none';
-            }}
-          />
-          <div>
-            <div className="flex items-center space-x-1.5">
-              <span className="font-bold text-slate-900 tracking-tight text-base sm:text-lg">霧臺國小</span>
-              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-100/80">
-                ClassQnA
-              </span>
+    <>
+      <header className="sticky top-0 z-40 w-full glass-panel border-b border-white/40 shadow-xs">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+          {/* Left: Brand / School Logo */}
+          <div className="flex items-center space-x-3">
+            <img
+              src="/logo.jpg"
+              alt="School Logo"
+              className="w-9 h-9 rounded-xl object-cover shadow-xs border border-white/60"
+              onError={(e) => {
+                (e.target as HTMLElement).style.display = 'none';
+              }}
+            />
+            <div>
+              <div
+                onClick={handleTitleClick}
+                className="flex items-center space-x-1.5 cursor-pointer select-none group"
+                title="點擊 5 下開啟管理員後台"
+              >
+                <span className="font-bold text-slate-900 tracking-tight text-base sm:text-lg group-hover:text-indigo-600 transition">
+                  {schoolName}
+                </span>
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-100/80">
+                  ClassQnA
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 hidden sm:block">即時教學互動系統</p>
             </div>
-            <p className="text-[11px] text-slate-400 hidden sm:block">即時教學互動系統</p>
           </div>
-        </div>
+
 
         {/* Center/Right: Room info badge */}
         <div className="flex items-center space-x-2 sm:space-x-3">
@@ -114,5 +160,23 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
     </header>
+
+    {/* Admin Authentication Modal */}
+    <AdminAuthModal
+      isOpen={showAuthModal}
+      onClose={() => setShowAuthModal(false)}
+      onSuccess={() => {
+        setShowAuthModal(false);
+        setShowAdminModal(true);
+      }}
+    />
+
+    {/* Admin Console Modal */}
+    <AdminModal
+      isOpen={showAdminModal}
+      onClose={() => setShowAdminModal(false)}
+    />
+  </>
   );
 };
+

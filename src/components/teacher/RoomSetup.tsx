@@ -23,15 +23,22 @@ export const RoomSetup: React.FC<RoomSetupProps> = ({ onRoomCreated }) => {
       const { rosterByClass } = await fetchRoster();
       const keys = Object.keys(rosterByClass).sort();
       setRosterClasses(keys);
-      if (keys.length > 0) {
+      if (keys.length > 0 && selectedClasses.length === 0) {
         setSelectedClasses([keys[0]]);
-      } else {
+      } else if (keys.length === 0) {
         setCustomMode(true);
       }
       setLoadingRoster(false);
     }
     load();
+
+    const handleRosterChange = () => {
+      load();
+    };
+    window.addEventListener('roster-changed', handleRosterChange);
+    return () => window.removeEventListener('roster-changed', handleRosterChange);
   }, []);
+
 
   const toggleClass = (classKey: string) => {
     setSelectedClasses((prev) =>
