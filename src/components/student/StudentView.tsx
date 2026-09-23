@@ -193,7 +193,7 @@ export const StudentView: React.FC<StudentViewProps> = ({
         );
       }
     } catch (err: any) {
-      alert('送出失敗，請重試（作答草稿已為您保留）：' + err.message);
+      alert('傳送失敗！您的答案已妥善保留，請檢查網路後再次點擊「交答案」即可！');
     } finally {
       setSubmitting(false);
     }
@@ -415,12 +415,12 @@ export const StudentView: React.FC<StudentViewProps> = ({
               {submitting ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  <span>正在送出答案...</span>
+                  <span>傳送中...</span>
                 </>
               ) : (
                 <>
                   <Send className="w-5 h-5" />
-                  <span>送出答案</span>
+                  <span>交答案</span>
                 </>
               )}
             </button>

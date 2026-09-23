@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
+import { QrCode } from 'lucide-react';
 import { RoomSetup } from './RoomSetup';
 import { QuestionPublisher } from './QuestionPublisher';
 import { LiveAnswerWall } from './LiveAnswerWall';
 import { GradingView } from './GradingView';
 import { Leaderboard } from './Leaderboard';
 import { FloatingDock } from './FloatingDock';
+import { LiveJoinLobbyModal } from './LiveJoinLobbyModal';
 import { useRoom } from '../../hooks/useRoom';
 import { useSubmissions } from '../../hooks/useSubmissions';
 import { QuestionType } from '../../types';
@@ -16,6 +18,8 @@ interface TeacherViewProps {
 export const TeacherView: React.FC<TeacherViewProps> = ({ initialRoomId }) => {
   const [roomId, setRoomId] = useState<string | null>(initialRoomId || null);
   const [step, setStep] = useState<2 | 3 | 4 | 5>(2);
+  const [showLobbyModal, setShowLobbyModal] = useState(false);
+  const [advancingQuestion, setAdvancingQuestion] = useState(false);
 
   const { room, students, updateRoomState } = useRoom(roomId);
   const { submissions, submissionMap, awardScore } = useSubmissions(
@@ -115,13 +119,19 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ initialRoomId }) => {
   };
 
   const handleNextQuestion = async () => {
-    await updateRoomState({
-      current_question_num: room.current_question_num + 1,
-      status: 'idle',
-      revealed_answer: null,
-      broadcast_image_url: '',
-    });
-    setStep(2);
+    if (advancingQuestion) return;
+    setAdvancingQuestion(true);
+    try {
+      await updateRoomState({
+        current_question_num: room.current_question_num + 1,
+        status: 'idle',
+        revealed_answer: null,
+        broadcast_image_url: '',
+      });
+      setStep(2);
+    } finally {
+      setAdvancingQuestion(false);
+    }
   };
 
   const handleResetScores = async () => {
@@ -133,8 +143,20 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ initialRoomId }) => {
 
   return (
     <div className="pb-28">
-      {/* Top Step Dots Navigation */}
-      <div className="max-w-xl mx-auto px-4 pt-6 pb-2">
+      {/* Top Step Dots Navigation & Lobby Shortcut */}
+      <div className="max-w-xl mx-auto px-4 pt-5 pb-2">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-xs font-bold text-slate-500">課堂互動流程</span>
+          <button
+            onClick={() => setShowLobbyModal(true)}
+            className="px-3 py-1 rounded-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs border border-indigo-200 transition shadow-2xs flex items-center space-x-1.5 active:scale-95"
+            title="開啟學生掃碼加入大廳"
+          >
+            <QrCode className="w-3.5 h-3.5 text-indigo-600" />
+            <span>投影報到大廳 ({students.length}人已加入)</span>
+          </button>
+        </div>
+
         <div className="flex items-center justify-between">
           {[
             { s: 2, label: '出題設定' },
@@ -219,7 +241,15 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ initialRoomId }) => {
       )}
 
       {/* Floating Tools Dock */}
-      <FloatingDock room={room} onUpdateRoom={updateRoomState} />
+      <FloatingDock room={room} onUpdateRoom={updateRoomState} students={students} />
+
+      {/* Kahoot!-style Live Join Lobby Modal */}
+      <LiveJoinLobbyModal
+        isOpen={showLobbyModal}
+        onClose={() => setShowLobbyModal(false)}
+        room={room}
+        students={students}
+      />
     </div>
   );
 };

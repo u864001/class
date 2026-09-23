@@ -25,7 +25,7 @@ import {
   RefreshCw,
   Layers,
 } from 'lucide-react';
-import { Room } from '../../types';
+import { Room, RoomStudent } from '../../types';
 import { supabase } from '../../lib/supabase';
 import { captureScreenSlide } from '../../lib/imageCompressor';
 import {
@@ -34,13 +34,15 @@ import {
   deleteRoomSlideDeck,
   BroadcastDeckState,
 } from '../../lib/broadcastDeck';
+import { LiveJoinLobbyModal } from './LiveJoinLobbyModal';
 
 interface FloatingDockProps {
   room: Room;
   onUpdateRoom: (updates: Partial<Room>) => Promise<void>;
+  students?: RoomStudent[];
 }
 
-export const FloatingDock: React.FC<FloatingDockProps> = ({ room, onUpdateRoom }) => {
+export const FloatingDock: React.FC<FloatingDockProps> = ({ room, onUpdateRoom, students }) => {
   const [activeTool, setActiveTool] = useState<
     'qr' | 'broadcast' | 'timer' | 'dice' | 'picker' | 'vote' | 'group' | 'buzz' | 'screenshare' | null
   >(null);
@@ -355,7 +357,16 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({ room, onUpdateRoom }
       </div>
 
       {/* Modal Dialog for Active Tool */}
-      {activeTool && (
+      {/* Kahoot!-style Live Join Lobby Modal */}
+      <LiveJoinLobbyModal
+        isOpen={activeTool === 'qr'}
+        onClose={() => setActiveTool(null)}
+        room={room}
+        students={students || []}
+      />
+
+      {/* Modal Dialog for Other Active Tools */}
+      {activeTool && activeTool !== 'qr' && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div
             className={`glass-panel ${
@@ -369,22 +380,6 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({ room, onUpdateRoom }
             >
               <X className="w-4 h-4" />
             </button>
-
-            {/* QR Code Modal */}
-            {activeTool === 'qr' && (
-              <div className="text-center space-y-4 pt-2">
-                <h3 className="font-extrabold text-slate-800 text-lg">學生掃描加入教室</h3>
-                <div className="p-4 bg-white rounded-2xl inline-block shadow-xs border border-slate-100">
-                  <QRCodeSVG value={studentJoinUrl} size={220} level="M" />
-                </div>
-                <div>
-                  <div className="text-xs text-slate-400 font-semibold mb-1">或請學生在首頁輸入房號：</div>
-                  <div className="text-3xl font-mono font-black text-indigo-600 tracking-wider">
-                    {room.id}
-                  </div>
-                </div>
-              </div>
-            )}
 
             {/* Broadcast Modal */}
             {activeTool === 'broadcast' && (
