@@ -162,8 +162,8 @@ export async function captureAndUploadScreenSnapshot(roomId: string): Promise<st
           }
 
           try {
-            // 固定路徑 + upsert: true，永遠只佔用 1 張圖的儲存額度
-            const filePath = `${roomId}/screen_broadcast.webp`;
+            // 使用專屬時間戳檔名，避免 HTTP 快取導致學生看到舊截圖
+            const filePath = `${roomId}/screen_${Date.now()}.webp`;
             const { error } = await supabase.storage
               .from('class_assets')
               .upload(filePath, blob, {
@@ -182,8 +182,7 @@ export async function captureAndUploadScreenSnapshot(roomId: string): Promise<st
               .from('class_assets')
               .getPublicUrl(filePath);
 
-            // 附帶時間戳以破除瀏覽器 HTTP 快取，確保學生端看到最新翻頁
-            resolve(`${data.publicUrl}?t=${Date.now()}`);
+            resolve(data.publicUrl);
           } catch (err) {
             console.warn('上傳例外，使用本地快照：', err);
             resolve(canvas.toDataURL('image/jpeg', 0.7));
@@ -251,7 +250,7 @@ export async function captureScreenSlide(roomId: string, slideIndex: number): Pr
           }
 
           try {
-            const filePath = `${roomId}/slide_${slideIndex}.webp`;
+            const filePath = `${roomId}/slide_${slideIndex}_${Date.now()}.webp`;
             const { error } = await supabase.storage
               .from('class_assets')
               .upload(filePath, blob, {
@@ -270,7 +269,7 @@ export async function captureScreenSlide(roomId: string, slideIndex: number): Pr
               .from('class_assets')
               .getPublicUrl(filePath);
 
-            resolve(`${data.publicUrl}?t=${Date.now()}`);
+            resolve(data.publicUrl);
           } catch (err) {
             console.warn('上傳例外，使用本地快照：', err);
             resolve(canvas.toDataURL('image/jpeg', 0.7));

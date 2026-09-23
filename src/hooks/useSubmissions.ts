@@ -95,7 +95,11 @@ export function useSubmissions(roomId: string | null, roundId: string | null) {
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          fetchSubmissions();
+        }
+      });
 
     return () => {
       supabase.removeChannel(channel);

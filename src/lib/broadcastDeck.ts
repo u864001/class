@@ -54,6 +54,20 @@ export function serializeBroadcastDeck(state: BroadcastDeckState): string {
 export async function deleteRoomSlideDeck(roomId: string, slideUrls?: string[]): Promise<void> {
   const filePaths: string[] = [];
   
+  // 動態列出該教室資料夾下所有歷史快照檔案（包含帶時間戳的圖片）
+  try {
+    const { data: files } = await supabase.storage.from('class_assets').list(roomId);
+    if (files && files.length > 0) {
+      for (const f of files) {
+        if (f.name) {
+          filePaths.push(`${roomId}/${f.name}`);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Error listing room files in storage:', err);
+  }
+
   if (slideUrls && slideUrls.length > 0) {
     for (const url of slideUrls) {
       try {

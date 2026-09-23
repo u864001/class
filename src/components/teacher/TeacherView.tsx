@@ -86,12 +86,11 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ initialRoomId }) => {
     const scores = { ...(room.cumulative_scores || {}) };
 
     for (const sub of submissions) {
-      if (sub.choice === correctChoice) {
-        scores[sub.student_id] = (scores[sub.student_id] || 0) + qScore;
-        await awardScore(sub.student_id, qScore);
-      } else {
-        await awardScore(sub.student_id, 0);
-      }
+      const prevEarned = sub.earned_score || 0;
+      const isCorrect = sub.choice === correctChoice;
+      const newEarned = isCorrect ? qScore : 0;
+      scores[sub.student_id] = Math.max(0, (scores[sub.student_id] || 0) - prevEarned + newEarned);
+      await awardScore(sub.student_id, newEarned);
     }
 
     await updateRoomState({

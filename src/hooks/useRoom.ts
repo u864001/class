@@ -124,6 +124,7 @@ export function useRoom(roomId: string | null) {
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           setConnectionStatus('connected');
+          fetchRoom();
         } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           if (navigator.onLine) {
             setConnectionStatus('connecting');
