@@ -21,7 +21,7 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ initialRoomId }) => {
   const [showLobbyModal, setShowLobbyModal] = useState(false);
   const [advancingQuestion, setAdvancingQuestion] = useState(false);
 
-  const { room, students, updateRoomState } = useRoom(roomId);
+  const { room, students, updateRoomState, kickStudent } = useRoom(roomId);
   const { submissions, submissionMap, awardScore } = useSubmissions(
     roomId,
     room?.current_round_id || null
@@ -241,7 +241,12 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ initialRoomId }) => {
       )}
 
       {/* Floating Tools Dock */}
-      <FloatingDock room={room} onUpdateRoom={updateRoomState} students={students} />
+      <FloatingDock
+        room={room}
+        onUpdateRoom={updateRoomState}
+        students={students}
+        onKickStudent={kickStudent}
+      />
 
       {/* Kahoot!-style Live Join Lobby Modal */}
       <LiveJoinLobbyModal
@@ -249,6 +254,7 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ initialRoomId }) => {
         onClose={() => setShowLobbyModal(false)}
         room={room}
         students={students}
+        onKickStudent={kickStudent}
       />
     </div>
   );

@@ -40,9 +40,15 @@ interface FloatingDockProps {
   room: Room;
   onUpdateRoom: (updates: Partial<Room>) => Promise<void>;
   students?: RoomStudent[];
+  onKickStudent?: (studentId: string, studentName?: string) => Promise<void>;
 }
 
-export const FloatingDock: React.FC<FloatingDockProps> = ({ room, onUpdateRoom, students }) => {
+export const FloatingDock: React.FC<FloatingDockProps> = ({
+  room,
+  onUpdateRoom,
+  students,
+  onKickStudent,
+}) => {
   const [activeTool, setActiveTool] = useState<
     'qr' | 'broadcast' | 'timer' | 'dice' | 'picker' | 'vote' | 'group' | 'buzz' | 'screenshare' | null
   >(null);
@@ -363,6 +369,7 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({ room, onUpdateRoom, 
         onClose={() => setActiveTool(null)}
         room={room}
         students={students || []}
+        onKickStudent={onKickStudent}
       />
 
       {/* Modal Dialog for Other Active Tools */}

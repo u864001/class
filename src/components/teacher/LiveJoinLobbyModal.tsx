@@ -22,6 +22,7 @@ interface LiveJoinLobbyModalProps {
   onClose: () => void;
   room: Room;
   students: RoomStudent[];
+  onKickStudent?: (studentId: string, studentName?: string) => Promise<void>;
 }
 
 export const LiveJoinLobbyModal: React.FC<LiveJoinLobbyModalProps> = ({
@@ -29,11 +30,13 @@ export const LiveJoinLobbyModal: React.FC<LiveJoinLobbyModalProps> = ({
   onClose,
   room,
   students,
+  onKickStudent,
 }) => {
   const [activeTab, setActiveTab] = useState<'all' | 'unjoined' | 'joined'>('all');
   const [copied, setCopied] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [expectedList, setExpectedList] = useState<{ id: string; seatNum: number; name: string }[]>([]);
+  const [kickingId, setKickingId] = useState<string | null>(null);
   const prevJoinedCountRef = useRef<number>(0);
 
   // 1. 取得本教室的完整應到名單（依據選擇的班級或自訂人數）
@@ -75,7 +78,8 @@ export const LiveJoinLobbyModal: React.FC<LiveJoinLobbyModalProps> = ({
 
   // 2. 比對目前即時連線的學生名單
   const lobbyStudents = useMemo(() => {
-    return expectedList.map((expected) => {
+    const matchedIds = new Set<string>();
+    const list = expectedList.map((expected) => {
       const match = students?.find(
         (s) =>
           s.student_id === expected.id ||
@@ -83,13 +87,31 @@ export const LiveJoinLobbyModal: React.FC<LiveJoinLobbyModalProps> = ({
           s.student_id === String(expected.seatNum) ||
           s.student_name === expected.name
       );
+      if (match) matchedIds.add(match.student_id);
       const isJoined = !!match && match.is_online !== false;
       return {
         ...expected,
+        matchedStudentId: match?.student_id || expected.id,
         displayName: match?.student_name || expected.name,
         isJoined,
       };
     });
+
+    // 檢查是否有不在預期名冊內的額外加入學生
+    students?.forEach((s) => {
+      if (!matchedIds.has(s.student_id) && s.is_online !== false) {
+        list.push({
+          id: s.student_id,
+          seatNum: 0,
+          name: s.student_name || s.student_id,
+          matchedStudentId: s.student_id,
+          displayName: s.student_name || s.student_id,
+          isJoined: true,
+        });
+      }
+    });
+
+    return list;
   }, [expectedList, students]);
 
   const joinedStudents = useMemo(() => lobbyStudents.filter((s) => s.isJoined), [lobbyStudents]);
@@ -98,6 +120,27 @@ export const LiveJoinLobbyModal: React.FC<LiveJoinLobbyModalProps> = ({
   const joinedCount = joinedStudents.length;
   const totalCount = lobbyStudents.length;
   const progressPercent = totalCount > 0 ? Math.round((joinedCount / totalCount) * 100) : 0;
+
+  // 踢除點錯或冒用座號的學生
+  const handleKickClick = async (
+    matchedStudentId: string,
+    seatNum: number,
+    displayName: string
+  ) => {
+    if (!onKickStudent) return;
+    const seatLabel = seatNum > 0 ? `${seatNum} 號 ` : '';
+    const ok = window.confirm(
+      `確定要將【${seatLabel}${displayName}】移出教室嗎？\n\n移出後：\n• 該學生 iPad 端將自動退回加入畫面重新選擇座號\n• 該座號將立即恢復為「尚未加入」\n• 正確的同學可重新選擇該座號加入`
+    );
+    if (!ok) return;
+
+    try {
+      setKickingId(matchedStudentId);
+      await onKickStudent(matchedStudentId, displayName);
+    } finally {
+      setKickingId(null);
+    }
+  };
 
   // 3. Kahoot! 風格音效：每當有新同學加入時播放輕快音效
   useEffect(() => {
@@ -309,9 +352,25 @@ export const LiveJoinLobbyModal: React.FC<LiveJoinLobbyModalProps> = ({
                       </span>
                     </div>
 
-                    <div>
+                    <div className="flex items-center space-x-1 flex-shrink-0">
                       {st.isJoined ? (
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                        <>
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                          {onKickStudent && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleKickClick(st.matchedStudentId, st.seatNum, st.displayName);
+                              }}
+                              disabled={kickingId === st.matchedStudentId}
+                              title={`移出 ${st.displayName}（釋放座號）`}
+                              className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-100 transition active:scale-90 ml-0.5"
+                            >
+                              <UserX className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </>
                       ) : (
                         <Clock className="w-3.5 h-3.5 text-slate-300 flex-shrink-0" />
                       )}

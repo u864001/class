@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Bell,
   Lock,
@@ -44,7 +44,16 @@ export const StudentView: React.FC<StudentViewProps> = ({
   studentName,
   onLeave,
 }) => {
-  const { room, loading, connectionStatus } = useRoom(roomId);
+  // 處理被教師移出教室時的自動退回登入與提示
+  const handleKicked = useCallback(() => {
+    alert('⚠️ 您已被老師移出教室。\n\n若您點錯座號或姓名，請重新選擇正確的座號登入！');
+    onLeave();
+  }, [onLeave]);
+
+  const { room, loading, connectionStatus } = useRoom(roomId, {
+    studentId,
+    onKicked: handleKicked,
+  });
   const { submissionMap, submitAnswer, refresh: refreshSubmissions } = useSubmissions(
     roomId,
     room?.current_round_id || null
