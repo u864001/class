@@ -16,9 +16,13 @@ import {
   Play,
   RotateCcw,
   Sparkles,
+  MonitorUp,
+  Camera,
+  Loader2,
 } from 'lucide-react';
 import { Room } from '../../types';
 import { supabase } from '../../lib/supabase';
+import { captureAndUploadScreenSnapshot } from '../../lib/imageCompressor';
 
 interface FloatingDockProps {
   room: Room;
@@ -27,8 +31,9 @@ interface FloatingDockProps {
 
 export const FloatingDock: React.FC<FloatingDockProps> = ({ room, onUpdateRoom }) => {
   const [activeTool, setActiveTool] = useState<
-    'qr' | 'broadcast' | 'timer' | 'dice' | 'picker' | 'vote' | 'group' | 'buzz' | null
+    'qr' | 'broadcast' | 'timer' | 'dice' | 'picker' | 'vote' | 'group' | 'buzz' | 'screenshare' | null
   >(null);
+  const [snappingScreen, setSnappingScreen] = useState(false);
 
   // Timer tool local state
   const [timerVal, setTimerVal] = useState(60);
@@ -58,6 +63,29 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({ room, onUpdateRoom }
 
   const handleBroadcast = async () => {
     await onUpdateRoom({ broadcast_text: broadcastInput.trim() });
+    setActiveTool(null);
+  };
+
+  const handleCaptureAndBroadcast = async () => {
+    setSnappingScreen(true);
+    try {
+      const url = await captureAndUploadScreenSnapshot(room.id);
+      await onUpdateRoom({
+        broadcast_image_url: url,
+      });
+      setActiveTool('screenshare');
+    } catch (err: any) {
+      if (err.name !== 'NotAllowedError') {
+        console.error('Screen capture failed:', err);
+        alert('螢幕快照擷取失敗：' + (err.message || '請確認瀏覽器分享權限'));
+      }
+    } finally {
+      setSnappingScreen(false);
+    }
+  };
+
+  const handleStopScreenBroadcast = async () => {
+    await onUpdateRoom({ broadcast_image_url: '' });
     setActiveTool(null);
   };
 
@@ -121,10 +149,23 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({ room, onUpdateRoom }
 
           <button
             onClick={() => setActiveTool('broadcast')}
-            title="廣播通知"
+            title="跑馬燈文字廣播"
             className="p-2.5 rounded-xl hover:bg-indigo-50/80 text-slate-600 hover:text-indigo-600 transition"
           >
             <Megaphone className="w-5 h-5" />
+          </button>
+
+          {/* 螢幕快照廣播按鈕 */}
+          <button
+            onClick={() => setActiveTool('screenshare')}
+            title="一鍵廣播螢幕快照至學生 iPad"
+            className={`p-2.5 rounded-xl transition ${
+              room.broadcast_image_url
+                ? 'bg-amber-100 text-amber-700 ring-2 ring-amber-400 animate-pulse'
+                : 'hover:bg-indigo-50/80 text-slate-600 hover:text-indigo-600'
+            }`}
+          >
+            <MonitorUp className="w-5 h-5" />
           </button>
 
           <button
@@ -251,6 +292,82 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({ room, onUpdateRoom }
                     推播至學生端
                   </button>
                 </div>
+              </div>
+            )}
+
+            {/* Screen Share / Snapshot Modal */}
+            {activeTool === 'screenshare' && (
+              <div className="space-y-4 pt-2 text-center">
+                <div className="flex items-center justify-center space-x-2 text-slate-800 font-extrabold text-lg">
+                  <MonitorUp className="w-6 h-6 text-indigo-600" />
+                  <span>一鍵廣播螢幕快照</span>
+                </div>
+                <p className="text-xs text-slate-500 max-w-xs mx-auto">
+                  適合在大黑板/投影故障時，將教師當前的電子書、PPT 或網頁畫面快照推送到所有學生的 iPad 螢幕！
+                </p>
+
+                {room.broadcast_image_url ? (
+                  <div className="space-y-3">
+                    <div className="relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 p-1.5 max-h-48 flex items-center justify-center">
+                      <img
+                        src={room.broadcast_image_url}
+                        alt="Current Broadcast"
+                        className="max-h-44 object-contain rounded-xl"
+                      />
+                      <div className="absolute top-3 left-3 px-2 py-0.5 rounded-full bg-emerald-500 text-white text-[10px] font-bold shadow-xs">
+                        全班推送中
+                      </div>
+                    </div>
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={handleCaptureAndBroadcast}
+                        disabled={snappingScreen}
+                        className="flex-1 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-xs disabled:opacity-50"
+                      >
+                        {snappingScreen ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>擷取中...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Camera className="w-4 h-4" />
+                            <span>更新最新快照</span>
+                          </>
+                        )}
+                      </button>
+                      <button
+                        onClick={handleStopScreenBroadcast}
+                        className="py-3 px-4 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-100 font-bold text-xs"
+                      >
+                        停止廣播
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="py-4 space-y-4">
+                    <div className="w-16 h-16 rounded-2xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center mx-auto">
+                      <MonitorUp className="w-8 h-8" />
+                    </div>
+                    <button
+                      onClick={handleCaptureAndBroadcast}
+                      disabled={snappingScreen}
+                      className="w-full py-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-xs flex items-center justify-center space-x-2 active:scale-95 disabled:opacity-50"
+                    >
+                      {snappingScreen ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>正在擷取螢幕畫面...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Camera className="w-4 h-4" />
+                          <span>開始擷取並推播至全班</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 

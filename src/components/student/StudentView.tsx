@@ -12,6 +12,11 @@ import {
   Sparkles,
   LogOut,
   AlertCircle,
+  Minimize2,
+  Maximize2,
+  ZoomIn,
+  ZoomOut,
+  Monitor,
 } from 'lucide-react';
 import { Room } from '../../types';
 import { useRoom } from '../../hooks/useRoom';
@@ -52,6 +57,8 @@ export const StudentView: React.FC<StudentViewProps> = ({
 
   // Broadcast image modal
   const [dismissBroadcastImage, setDismissBroadcastImage] = useState(false);
+  const [isMinimizedBroadcast, setIsMinimizedBroadcast] = useState(false);
+  const [isZoomedBroadcast, setIsZoomedBroadcast] = useState(false);
 
   const currentSubmission = submissionMap[studentId];
   const isAnswering = room?.status === 'answering';
@@ -68,8 +75,16 @@ export const StudentView: React.FC<StudentViewProps> = ({
   useEffect(() => {
     setSelectedChoice(null);
     setTextAnswer('');
-    setDismissBroadcastImage(false);
   }, [room?.current_round_id]);
+
+  // When teacher pushes new broadcast snapshot, wake up and display
+  useEffect(() => {
+    if (room?.broadcast_image_url) {
+      setDismissBroadcastImage(false);
+      setIsMinimizedBroadcast(false);
+      setIsZoomedBroadcast(false);
+    }
+  }, [room?.broadcast_image_url]);
 
   // Handle buzzer countdown
   useEffect(() => {
@@ -433,25 +448,91 @@ export const StudentView: React.FC<StudentViewProps> = ({
         </div>
       )}
 
-      {/* Overlay 4: Teacher Broadcasted Artwork */}
+      {/* Overlay 4: Teacher Broadcasted Screen Snapshot / Artwork */}
       {room.broadcast_image_url && !dismissBroadcastImage && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex flex-col items-center justify-center p-4">
-          <div className="glass-panel max-w-md w-full rounded-3xl p-5 space-y-3 relative text-center">
-            <button
-              onClick={() => setDismissBroadcastImage(true)}
-              className="absolute top-4 right-4 p-1.5 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200"
-            >
-              <X className="w-4 h-4" />
-            </button>
-            <div className="text-sm font-bold text-slate-800 flex items-center justify-center space-x-1.5">
-              <Sparkles className="w-4 h-4 text-amber-500" />
-              <span>老師分享了優秀作品</span>
+        isMinimizedBroadcast ? (
+          /* Minimized Floating Picture-in-Picture Thumbnail */
+          <div
+            onClick={() => setIsMinimizedBroadcast(false)}
+            className="fixed bottom-6 right-6 z-50 glass-panel p-2 rounded-2xl shadow-soft border border-indigo-300 bg-white/95 cursor-pointer flex items-center space-x-2 animate-bounce hover:scale-105 transition"
+            title="點擊展開老師推播畫面"
+          >
+            <div className="w-12 h-9 rounded-lg overflow-hidden bg-slate-100 border border-slate-200 flex items-center justify-center flex-shrink-0">
+              <img src={room.broadcast_image_url} alt="Thumbnail" className="w-full h-full object-cover" />
             </div>
-            <div className="rounded-2xl overflow-hidden bg-white p-2 border border-slate-200 max-h-[60vh] flex items-center justify-center">
-              <img src={room.broadcast_image_url} alt="Broadcast artwork" className="max-h-[56vh] object-contain rounded-xl" />
+            <div className="pr-1 text-left">
+              <div className="text-[11px] font-extrabold text-indigo-700 flex items-center space-x-1">
+                <Monitor className="w-3 h-3" />
+                <span>老師畫面</span>
+              </div>
+              <div className="text-[9px] text-slate-400">點擊放大檢視</div>
             </div>
           </div>
-        </div>
+        ) : (
+          /* Full-screen / Wide iPad Broadcast Viewer */
+          <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex flex-col items-center justify-center p-3 sm:p-6">
+            <div className="glass-panel max-w-4xl w-full rounded-3xl p-4 sm:p-5 space-y-3 relative text-center flex flex-col max-h-[92vh]">
+              {/* Top toolbar */}
+              <div className="flex items-center justify-between border-b border-slate-200/60 pb-3">
+                <div className="flex items-center space-x-2 text-slate-800 font-extrabold text-sm sm:text-base">
+                  <Monitor className="w-5 h-5 text-indigo-600" />
+                  <span>老師正在推播畫面</span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">即時同步</span>
+                </div>
+
+                <div className="flex items-center space-x-1.5">
+                  {/* Zoom Toggle */}
+                  <button
+                    onClick={() => setIsZoomedBroadcast(!isZoomedBroadcast)}
+                    className="p-2 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 transition text-xs font-semibold flex items-center space-x-1"
+                    title={isZoomedBroadcast ? '還原大小' : '放大字體'}
+                  >
+                    {isZoomedBroadcast ? <ZoomOut className="w-4 h-4" /> : <ZoomIn className="w-4 h-4" />}
+                    <span className="hidden sm:inline">{isZoomedBroadcast ? '縮小' : '放大'}</span>
+                  </button>
+
+                  {/* Minimize PiP */}
+                  <button
+                    onClick={() => setIsMinimizedBroadcast(true)}
+                    className="p-2 rounded-xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition text-xs font-semibold flex items-center space-x-1"
+                    title="縮小為小窗，方便邊看邊作答"
+                  >
+                    <Minimize2 className="w-4 h-4" />
+                    <span className="hidden sm:inline">縮小為小窗</span>
+                  </button>
+
+                  {/* Close / Dismiss */}
+                  <button
+                    onClick={() => setDismissBroadcastImage(true)}
+                    className="p-2 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200 transition"
+                    title="暫時關閉"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Image Frame with Zoom / Pan support */}
+              <div
+                className={`flex-1 rounded-2xl overflow-auto bg-slate-900/90 p-2 flex items-center justify-center border border-slate-800 touch-pan-x touch-pan-y ${
+                  isZoomedBroadcast ? 'cursor-grab' : ''
+                }`}
+              >
+                <img
+                  src={room.broadcast_image_url}
+                  alt="Teacher Screen Broadcast"
+                  className={`transition-all duration-300 rounded-xl object-contain ${
+                    isZoomedBroadcast ? 'max-w-none w-[180%] h-auto' : 'max-h-[75vh] w-auto max-w-full'
+                  }`}
+                />
+              </div>
+
+              <div className="text-[11px] text-slate-400 font-medium">
+                若需邊看講義邊答題，可點擊右上角「縮小為小窗」以保留下方作答按鈕
+              </div>
+            </div>
+          </div>
+        )
       )}
     </div>
   );
