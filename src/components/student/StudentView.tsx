@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Bell,
   Lock,
+  Unlock,
   Megaphone,
   CheckCircle2,
   Clock,
@@ -17,6 +18,8 @@ import {
   ZoomIn,
   ZoomOut,
   Monitor,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { Room } from '../../types';
 import { useRoom } from '../../hooks/useRoom';
@@ -25,6 +28,8 @@ import { useSyncTimer } from '../../hooks/useSyncTimer';
 import { StudentCanvas } from './StudentCanvas';
 import { compressAndUploadCanvas } from '../../lib/imageCompressor';
 import { supabase } from '../../lib/supabase';
+import { parseBroadcastDeck } from '../../lib/broadcastDeck';
+
 
 interface StudentViewProps {
   roomId: string;
@@ -55,7 +60,9 @@ export const StudentView: React.FC<StudentViewProps> = ({
   const [selectedVoteOption, setSelectedVoteOption] = useState<string | null>(null);
   const [voteSubmitted, setVoteSubmitted] = useState(false);
 
-  // Broadcast image modal
+  // Broadcast image & slide deck modal
+  const deck = parseBroadcastDeck(room?.broadcast_image_url);
+  const [studentSlideIndex, setStudentSlideIndex] = useState(0);
   const [dismissBroadcastImage, setDismissBroadcastImage] = useState(false);
   const [isMinimizedBroadcast, setIsMinimizedBroadcast] = useState(false);
   const [isZoomedBroadcast, setIsZoomedBroadcast] = useState(false);
@@ -77,14 +84,26 @@ export const StudentView: React.FC<StudentViewProps> = ({
     setTextAnswer('');
   }, [room?.current_round_id]);
 
-  // When teacher pushes new broadcast snapshot, wake up and display
+  // Sync / Free mode tracking
+  useEffect(() => {
+    if (!deck || deck.slides.length === 0) return;
+
+    if (deck.mode === 'sync') {
+      // 老師強制同步中：學生機強制鎖定跳轉到老師當前頁
+      setStudentSlideIndex(deck.currentIndex);
+    } else {
+      // 自由溫習模式：確保頁碼在合法範圍內
+      setStudentSlideIndex((prev) => Math.min(prev, deck.slides.length - 1));
+    }
+  }, [deck?.mode, deck?.currentIndex, deck?.slides.length, deck?.updatedAt]);
+
+  // When teacher pushes new broadcast snapshot or slide deck, wake up and display
   useEffect(() => {
     if (room?.broadcast_image_url) {
       setDismissBroadcastImage(false);
-      setIsMinimizedBroadcast(false);
-      setIsZoomedBroadcast(false);
     }
   }, [room?.broadcast_image_url]);
+
 
   // Handle buzzer countdown
   useEffect(() => {
@@ -448,43 +467,78 @@ export const StudentView: React.FC<StudentViewProps> = ({
         </div>
       )}
 
-      {/* Overlay 4: Teacher Broadcasted Screen Snapshot / Artwork */}
-      {room.broadcast_image_url && !dismissBroadcastImage && (
-        isMinimizedBroadcast ? (
+      {/* Overlay 4: Teacher Broadcasted Screen Snapshot Slide Deck */}
+      {room.broadcast_image_url && !dismissBroadcastImage && (() => {
+        const slideCount = deck?.slides.length || 1;
+        const currentSlideIndex = deck
+          ? deck.mode === 'sync'
+            ? deck.currentIndex
+            : Math.max(0, Math.min(studentSlideIndex, slideCount - 1))
+          : 0;
+        const currentSlideUrl = deck?.slides[currentSlideIndex] || room.broadcast_image_url;
+
+        return isMinimizedBroadcast ? (
           /* Minimized Floating Picture-in-Picture Thumbnail */
           <div
             onClick={() => setIsMinimizedBroadcast(false)}
             className="fixed bottom-6 right-6 z-50 glass-panel p-2 rounded-2xl shadow-soft border border-indigo-300 bg-white/95 cursor-pointer flex items-center space-x-2 animate-bounce hover:scale-105 transition"
-            title="點擊展開老師推播畫面"
+            title="點擊展開講義畫面"
           >
-            <div className="w-12 h-9 rounded-lg overflow-hidden bg-slate-100 border border-slate-200 flex items-center justify-center flex-shrink-0">
-              <img src={room.broadcast_image_url} alt="Thumbnail" className="w-full h-full object-cover" />
+            <div className="w-12 h-9 rounded-lg overflow-hidden bg-slate-900 border border-slate-200 flex items-center justify-center flex-shrink-0">
+              <img src={currentSlideUrl} alt="Thumbnail" className="w-full h-full object-cover" />
             </div>
             <div className="pr-1 text-left">
               <div className="text-[11px] font-extrabold text-indigo-700 flex items-center space-x-1">
                 <Monitor className="w-3 h-3" />
-                <span>老師畫面</span>
+                <span>老師講義</span>
               </div>
-              <div className="text-[9px] text-slate-400">點擊放大檢視</div>
+              <div className="text-[9px] text-slate-400">
+                第 {currentSlideIndex + 1} / {slideCount} 頁
+              </div>
             </div>
           </div>
         ) : (
           /* Full-screen / Wide iPad Broadcast Viewer */
-          <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex flex-col items-center justify-center p-3 sm:p-6">
-            <div className="glass-panel max-w-4xl w-full rounded-3xl p-4 sm:p-5 space-y-3 relative text-center flex flex-col max-h-[92vh]">
+          <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex flex-col items-center justify-center p-2 sm:p-4">
+            <div className="glass-panel max-w-4xl w-full rounded-3xl p-3 sm:p-4 space-y-2.5 relative text-center flex flex-col max-h-[94vh]">
               {/* Top toolbar */}
-              <div className="flex items-center justify-between border-b border-slate-200/60 pb-3">
-                <div className="flex items-center space-x-2 text-slate-800 font-extrabold text-sm sm:text-base">
-                  <Monitor className="w-5 h-5 text-indigo-600" />
-                  <span>老師正在推播畫面</span>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">即時同步</span>
+              <div className="flex items-center justify-between border-b border-slate-200/60 pb-2.5">
+                <div className="flex items-center space-x-2 flex-wrap gap-y-1 text-left">
+                  <div className="flex items-center space-x-1.5 text-slate-800 font-extrabold text-xs sm:text-sm">
+                    <Monitor className="w-4 h-4 text-indigo-600" />
+                    <span>老師講義簿</span>
+                  </div>
+
+                  {/* Mode Indicator Badge */}
+                  {deck?.mode === 'sync' ? (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 flex items-center space-x-1">
+                      <Lock className="w-3 h-3" />
+                      <span>全班同步中 (第 {currentSlideIndex + 1} / {slideCount} 頁)</span>
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 flex items-center space-x-1">
+                      <Unlock className="w-3 h-3" />
+                      <span>自由溫習中 (第 {currentSlideIndex + 1} / {slideCount} 頁)</span>
+                    </span>
+                  )}
+
+                  {/* Jump back to teacher's slide in free mode */}
+                  {deck?.mode === 'free' && deck.currentIndex !== currentSlideIndex && (
+                    <button
+                      onClick={() => setStudentSlideIndex(deck.currentIndex)}
+                      className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition border border-indigo-200 flex items-center space-x-1"
+                      title="快速對齊老師目前講解頁"
+                    >
+                      <span>回到老師頁 (第 {deck.currentIndex + 1} 頁)</span>
+                    </button>
+                  )}
                 </div>
 
-                <div className="flex items-center space-x-1.5">
+                <div className="flex items-center space-x-1.5 flex-shrink-0">
                   {/* Zoom Toggle */}
                   <button
                     onClick={() => setIsZoomedBroadcast(!isZoomedBroadcast)}
-                    className="p-2 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 transition text-xs font-semibold flex items-center space-x-1"
+                    className="p-1.5 sm:p-2 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 transition text-xs font-semibold flex items-center space-x-1"
                     title={isZoomedBroadcast ? '還原大小' : '放大字體'}
                   >
                     {isZoomedBroadcast ? <ZoomOut className="w-4 h-4" /> : <ZoomIn className="w-4 h-4" />}
@@ -494,7 +548,7 @@ export const StudentView: React.FC<StudentViewProps> = ({
                   {/* Minimize PiP */}
                   <button
                     onClick={() => setIsMinimizedBroadcast(true)}
-                    className="p-2 rounded-xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition text-xs font-semibold flex items-center space-x-1"
+                    className="p-1.5 sm:p-2 rounded-xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition text-xs font-semibold flex items-center space-x-1"
                     title="縮小為小窗，方便邊看邊作答"
                   >
                     <Minimize2 className="w-4 h-4" />
@@ -504,7 +558,7 @@ export const StudentView: React.FC<StudentViewProps> = ({
                   {/* Close / Dismiss */}
                   <button
                     onClick={() => setDismissBroadcastImage(true)}
-                    className="p-2 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200 transition"
+                    className="p-1.5 sm:p-2 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200 transition"
                     title="暫時關閉"
                   >
                     <X className="w-4 h-4" />
@@ -514,26 +568,93 @@ export const StudentView: React.FC<StudentViewProps> = ({
 
               {/* Image Frame with Zoom / Pan support */}
               <div
-                className={`flex-1 rounded-2xl overflow-auto bg-slate-900/90 p-2 flex items-center justify-center border border-slate-800 touch-pan-x touch-pan-y ${
+                className={`flex-1 rounded-2xl overflow-auto bg-slate-950 p-2 flex items-center justify-center border border-slate-800 touch-pan-x touch-pan-y min-h-[160px] ${
                   isZoomedBroadcast ? 'cursor-grab' : ''
                 }`}
               >
                 <img
-                  src={room.broadcast_image_url}
-                  alt="Teacher Screen Broadcast"
-                  className={`transition-all duration-300 rounded-xl object-contain ${
-                    isZoomedBroadcast ? 'max-w-none w-[180%] h-auto' : 'max-h-[75vh] w-auto max-w-full'
+                  src={currentSlideUrl}
+                  alt={`Slide ${currentSlideIndex + 1}`}
+                  className={`transition-all duration-200 rounded-xl object-contain ${
+                    isZoomedBroadcast
+                      ? 'max-w-none w-[180%] h-auto'
+                      : 'max-h-[64vh] sm:max-h-[68vh] w-auto max-w-full'
                   }`}
                 />
               </div>
 
-              <div className="text-[11px] text-slate-400 font-medium">
-                若需邊看講義邊答題，可點擊右上角「縮小為小窗」以保留下方作答按鈕
-              </div>
+              {/* Bottom Navigation & Controls */}
+              {deck && slideCount > 1 ? (
+                deck.mode === 'free' ? (
+                  /* 自由翻頁模式：提供清晰好按的上下頁與頁碼按鈕 */
+                  <div className="flex items-center justify-between bg-slate-100/90 px-2 sm:px-3 py-1.5 rounded-2xl border border-slate-200">
+                    <button
+                      onClick={() => setStudentSlideIndex((prev) => Math.max(0, prev - 1))}
+                      disabled={currentSlideIndex === 0}
+                      className="px-3.5 py-1.5 rounded-xl bg-white text-slate-700 font-bold text-xs hover:bg-slate-50 disabled:opacity-30 disabled:pointer-events-none flex items-center space-x-1 border border-slate-200 shadow-2xs transition"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                      <span>上一頁</span>
+                    </button>
+
+                    {/* Slide page pills */}
+                    <div className="flex items-center space-x-1 overflow-x-auto max-w-[200px] sm:max-w-xs py-0.5 px-1 scrollbar-none">
+                      {deck.slides.map((_, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => setStudentSlideIndex(idx)}
+                          className={`w-7 h-7 rounded-xl text-xs font-bold transition flex items-center justify-center flex-shrink-0 ${
+                            idx === currentSlideIndex
+                              ? 'bg-indigo-600 text-white shadow-xs'
+                              : 'bg-white hover:bg-slate-200 text-slate-600 border border-slate-200'
+                          }`}
+                        >
+                          {idx + 1}
+                        </button>
+                      ))}
+                    </div>
+
+                    <button
+                      onClick={() =>
+                        setStudentSlideIndex((prev) => Math.min(slideCount - 1, prev + 1))
+                      }
+                      disabled={currentSlideIndex >= slideCount - 1}
+                      className="px-3.5 py-1.5 rounded-xl bg-white text-slate-700 font-bold text-xs hover:bg-slate-50 disabled:opacity-30 disabled:pointer-events-none flex items-center space-x-1 border border-slate-200 shadow-2xs transition"
+                    >
+                      <span>下一頁</span>
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  /* 全班同步鎖定模式：展示進度點與鎖定狀態 */
+                  <div className="flex items-center justify-between bg-slate-100/60 px-3 py-1.5 rounded-xl border border-slate-200/60 text-xs text-slate-500">
+                    <div className="flex items-center space-x-1.5 text-[11px] font-semibold text-slate-600">
+                      <Lock className="w-3.5 h-3.5 text-slate-400" />
+                      <span>老師正在統一引導翻頁，請跟隨講解</span>
+                    </div>
+                    <div className="flex items-center space-x-1">
+                      {deck.slides.map((_, idx) => (
+                        <div
+                          key={idx}
+                          className={`h-2 rounded-full transition-all ${
+                            idx === currentSlideIndex
+                              ? 'bg-indigo-600 w-4'
+                              : 'bg-slate-300 w-2'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )
+              ) : (
+                <div className="text-[11px] text-slate-400 font-medium">
+                  可點擊右上角「縮小為小窗」以保留下方作答按鈕邊看邊答
+                </div>
+              )}
             </div>
           </div>
-        )
-      )}
+        );
+      })()}
     </div>
   );
 };

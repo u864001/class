@@ -198,3 +198,89 @@ export async function captureAndUploadScreenSnapshot(roomId: string): Promise<st
   }
 }
 
+/**
+ * 擷取多頁講義快照（指定頁碼 slideIndex）：
+ * 上傳至 `${roomId}/slide_${slideIndex}.webp`
+ */
+export async function captureScreenSlide(roomId: string, slideIndex: number): Promise<string> {
+  if (!navigator.mediaDevices?.getDisplayMedia) {
+    throw new Error('您的瀏覽器不支援螢幕擷取功能，請使用電腦版 Chrome 或 Edge 瀏覽器。');
+  }
+
+  const stream = await navigator.mediaDevices.getDisplayMedia({
+    video: { displaySurface: 'monitor' },
+    audio: false,
+  });
+
+  try {
+    const video = document.createElement('video');
+    video.srcObject = stream;
+    video.muted = true;
+    await video.play();
+
+    await new Promise((r) => setTimeout(r, 150));
+
+    const width = video.videoWidth || 1920;
+    const height = video.videoHeight || 1080;
+
+    const maxW = 1440;
+    let targetW = width;
+    let targetH = height;
+    if (targetW > maxW) {
+      targetH = Math.round((height * maxW) / width);
+      targetW = maxW;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = targetW;
+    canvas.height = targetH;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('無法建立快照畫布');
+
+    ctx.drawImage(video, 0, 0, targetW, targetH);
+    stream.getTracks().forEach((track) => track.stop());
+
+    return new Promise((resolve) => {
+      canvas.toBlob(
+        async (blob) => {
+          if (!blob) {
+            resolve(canvas.toDataURL('image/jpeg', 0.75));
+            return;
+          }
+
+          try {
+            const filePath = `${roomId}/slide_${slideIndex}.webp`;
+            const { error } = await supabase.storage
+              .from('class_assets')
+              .upload(filePath, blob, {
+                contentType: 'image/webp',
+                upsert: true,
+              });
+
+            if (error) {
+              console.warn('Storage 上傳異常，改用本地快照：', error.message);
+              resolve(canvas.toDataURL('image/jpeg', 0.7));
+              return;
+            }
+
+            const { data } = supabase.storage
+              .from('class_assets')
+              .getPublicUrl(filePath);
+
+            resolve(`${data.publicUrl}?t=${Date.now()}`);
+          } catch (err) {
+            console.warn('上傳例外，使用本地快照：', err);
+            resolve(canvas.toDataURL('image/jpeg', 0.7));
+          }
+        },
+        'image/webp',
+        0.75
+      );
+    });
+  } catch (err) {
+    stream.getTracks().forEach((track) => track.stop());
+    throw err;
+  }
+}
+
+

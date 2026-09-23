@@ -19,10 +19,21 @@ import {
   MonitorUp,
   Camera,
   Loader2,
+  ChevronLeft,
+  ChevronRight,
+  Trash2,
+  RefreshCw,
+  Layers,
 } from 'lucide-react';
 import { Room } from '../../types';
 import { supabase } from '../../lib/supabase';
-import { captureAndUploadScreenSnapshot } from '../../lib/imageCompressor';
+import { captureScreenSlide } from '../../lib/imageCompressor';
+import {
+  parseBroadcastDeck,
+  serializeBroadcastDeck,
+  deleteRoomSlideDeck,
+  BroadcastDeckState,
+} from '../../lib/broadcastDeck';
 
 interface FloatingDockProps {
   room: Room;
@@ -34,6 +45,7 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({ room, onUpdateRoom }
     'qr' | 'broadcast' | 'timer' | 'dice' | 'picker' | 'vote' | 'group' | 'buzz' | 'screenshare' | null
   >(null);
   const [snappingScreen, setSnappingScreen] = useState(false);
+  const [isCleaningDeck, setIsCleaningDeck] = useState(false);
 
   // Timer tool local state
   const [timerVal, setTimerVal] = useState(60);
@@ -56,6 +68,9 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({ room, onUpdateRoom }
   // Broadcast local state
   const [broadcastInput, setBroadcastInput] = useState(room.broadcast_text || '');
 
+  // Parse current slide deck state
+  const deck = parseBroadcastDeck(room.broadcast_image_url);
+
   // --- Actions ---
   const toggleLockScreen = async () => {
     await onUpdateRoom({ screen_locked: !room.screen_locked });
@@ -66,13 +81,25 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({ room, onUpdateRoom }
     setActiveTool(null);
   };
 
-  const handleCaptureAndBroadcast = async () => {
+  // --- Slide Deck Actions ---
+  const handleCaptureNewSlide = async () => {
+    const currentSlides = deck?.slides || [];
+    if (currentSlides.length >= 25) {
+      alert('單次課堂最多支援 25 頁快照講義，以維護學生連線品質與免費額度。');
+      return;
+    }
     setSnappingScreen(true);
     try {
-      const url = await captureAndUploadScreenSnapshot(room.id);
-      await onUpdateRoom({
-        broadcast_image_url: url,
-      });
+      const nextIndex = currentSlides.length;
+      const url = await captureScreenSlide(room.id, nextIndex);
+      const nextState: BroadcastDeckState = {
+        version: 2,
+        slides: [...currentSlides, url],
+        currentIndex: nextIndex,
+        mode: deck?.mode || 'sync',
+        updatedAt: Date.now(),
+      };
+      await onUpdateRoom({ broadcast_image_url: serializeBroadcastDeck(nextState) });
       setActiveTool('screenshare');
     } catch (err: any) {
       if (err.name !== 'NotAllowedError') {
@@ -84,10 +111,94 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({ room, onUpdateRoom }
     }
   };
 
-  const handleStopScreenBroadcast = async () => {
-    await onUpdateRoom({ broadcast_image_url: '' });
-    setActiveTool(null);
+  const handleRecaptureCurrentSlide = async () => {
+    if (!deck || deck.slides.length === 0) return;
+    setSnappingScreen(true);
+    try {
+      const currentIdx = deck.currentIndex;
+      const url = await captureScreenSlide(room.id, currentIdx);
+      const nextSlides = [...deck.slides];
+      nextSlides[currentIdx] = url;
+      const nextState: BroadcastDeckState = {
+        ...deck,
+        slides: nextSlides,
+        updatedAt: Date.now(),
+      };
+      await onUpdateRoom({ broadcast_image_url: serializeBroadcastDeck(nextState) });
+    } catch (err: any) {
+      if (err.name !== 'NotAllowedError') {
+        console.error('Screen recapture failed:', err);
+        alert('重拍螢幕快照失敗：' + (err.message || '請確認權限'));
+      }
+    } finally {
+      setSnappingScreen(false);
+    }
   };
+
+  const handlePrevSlide = async () => {
+    if (!deck || deck.currentIndex <= 0) return;
+    const nextState: BroadcastDeckState = {
+      ...deck,
+      currentIndex: deck.currentIndex - 1,
+      updatedAt: Date.now(),
+    };
+    await onUpdateRoom({ broadcast_image_url: serializeBroadcastDeck(nextState) });
+  };
+
+  const handleNextSlide = async () => {
+    if (!deck || deck.currentIndex >= deck.slides.length - 1) return;
+    const nextState: BroadcastDeckState = {
+      ...deck,
+      currentIndex: deck.currentIndex + 1,
+      updatedAt: Date.now(),
+    };
+    await onUpdateRoom({ broadcast_image_url: serializeBroadcastDeck(nextState) });
+  };
+
+  const handleSelectSlide = async (targetIndex: number) => {
+    if (!deck || targetIndex < 0 || targetIndex >= deck.slides.length) return;
+    if (targetIndex === deck.currentIndex) return;
+    const nextState: BroadcastDeckState = {
+      ...deck,
+      currentIndex: targetIndex,
+      updatedAt: Date.now(),
+    };
+    await onUpdateRoom({ broadcast_image_url: serializeBroadcastDeck(nextState) });
+  };
+
+  const handleToggleMode = async () => {
+    if (!deck) return;
+    const nextMode = deck.mode === 'sync' ? 'free' : 'sync';
+    const nextState: BroadcastDeckState = {
+      ...deck,
+      mode: nextMode,
+      updatedAt: Date.now(),
+    };
+    await onUpdateRoom({ broadcast_image_url: serializeBroadcastDeck(nextState) });
+  };
+
+  const handleEndAndCleanup = async () => {
+    if (
+      !window.confirm(
+        '確定結束螢幕廣播並銷毀全部講義快照？\n這將立即清空雲端儲存空間（容量歸零），學生機也將同步關閉講義視窗。'
+      )
+    ) {
+      return;
+    }
+    setIsCleaningDeck(true);
+    try {
+      await deleteRoomSlideDeck(room.id, deck?.slides);
+      await onUpdateRoom({ broadcast_image_url: '' });
+      setActiveTool(null);
+    } catch (err) {
+      console.error('Error cleaning slides:', err);
+      await onUpdateRoom({ broadcast_image_url: '' });
+      setActiveTool(null);
+    } finally {
+      setIsCleaningDeck(false);
+    }
+  };
+
 
   const rollDice = () => {
     setRolling(true);
@@ -158,14 +269,21 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({ room, onUpdateRoom }
           {/* 螢幕快照廣播按鈕 */}
           <button
             onClick={() => setActiveTool('screenshare')}
-            title="一鍵廣播螢幕快照至學生 iPad"
-            className={`p-2.5 rounded-xl transition ${
-              room.broadcast_image_url
-                ? 'bg-amber-100 text-amber-700 ring-2 ring-amber-400 animate-pulse'
+            title="一鍵廣播螢幕快照講義至學生 iPad"
+            className={`p-2.5 rounded-xl relative transition ${
+              deck && deck.slides.length > 0
+                ? deck.mode === 'free'
+                  ? 'bg-amber-100 text-amber-700 ring-2 ring-amber-400'
+                  : 'bg-indigo-100 text-indigo-700 ring-2 ring-indigo-400'
                 : 'hover:bg-indigo-50/80 text-slate-600 hover:text-indigo-600'
             }`}
           >
             <MonitorUp className="w-5 h-5" />
+            {deck && deck.slides.length > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-indigo-600 text-white text-[9px] font-bold flex items-center justify-center shadow-xs">
+                {deck.slides.length}
+              </span>
+            )}
           </button>
 
           <button
@@ -239,7 +357,11 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({ room, onUpdateRoom }
       {/* Modal Dialog for Active Tool */}
       {activeTool && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="glass-panel max-w-md w-full rounded-3xl p-6 shadow-soft relative border border-white/80">
+          <div
+            className={`glass-panel ${
+              activeTool === 'screenshare' ? 'max-w-lg' : 'max-w-md'
+            } w-full rounded-3xl p-6 shadow-soft relative border border-white/80 max-h-[90vh] overflow-y-auto`}
+          >
             {/* Close button */}
             <button
               onClick={() => setActiveTool(null)}
@@ -295,62 +417,43 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({ room, onUpdateRoom }
               </div>
             )}
 
-            {/* Screen Share / Snapshot Modal */}
+            {/* Screen Share / Slide Deck Modal */}
             {activeTool === 'screenshare' && (
-              <div className="space-y-4 pt-2 text-center">
-                <div className="flex items-center justify-center space-x-2 text-slate-800 font-extrabold text-lg">
-                  <MonitorUp className="w-6 h-6 text-indigo-600" />
-                  <span>一鍵廣播螢幕快照</span>
-                </div>
-                <p className="text-xs text-slate-500 max-w-xs mx-auto">
-                  適合在大黑板/投影故障時，將教師當前的電子書、PPT 或網頁畫面快照推送到所有學生的 iPad 螢幕！
-                </p>
-
-                {room.broadcast_image_url ? (
-                  <div className="space-y-3">
-                    <div className="relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 p-1.5 max-h-48 flex items-center justify-center">
-                      <img
-                        src={room.broadcast_image_url}
-                        alt="Current Broadcast"
-                        className="max-h-44 object-contain rounded-xl"
-                      />
-                      <div className="absolute top-3 left-3 px-2 py-0.5 rounded-full bg-emerald-500 text-white text-[10px] font-bold shadow-xs">
-                        全班推送中
-                      </div>
-                    </div>
-                    <div className="flex space-x-2">
-                      <button
-                        onClick={handleCaptureAndBroadcast}
-                        disabled={snappingScreen}
-                        className="flex-1 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-xs disabled:opacity-50"
-                      >
-                        {snappingScreen ? (
-                          <>
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            <span>擷取中...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Camera className="w-4 h-4" />
-                            <span>更新最新快照</span>
-                          </>
-                        )}
-                      </button>
-                      <button
-                        onClick={handleStopScreenBroadcast}
-                        className="py-3 px-4 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-100 font-bold text-xs"
-                      >
-                        停止廣播
-                      </button>
-                    </div>
+              <div className="space-y-4 pt-1 text-center">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2 text-slate-800 font-extrabold text-base sm:text-lg">
+                    <MonitorUp className="w-5 h-5 text-indigo-600" />
+                    <span>螢幕快照講義簿</span>
                   </div>
-                ) : (
+                  {deck && deck.slides.length > 0 && (
+                    <span
+                      className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                        deck.mode === 'sync'
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : 'bg-amber-100 text-amber-700'
+                      }`}
+                    >
+                      {deck.mode === 'sync' ? '🔒 全班同步' : '🔓 學生自翻'}
+                    </span>
+                  )}
+                </div>
+
+                {!deck || deck.slides.length === 0 ? (
                   <div className="py-4 space-y-4">
                     <div className="w-16 h-16 rounded-2xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center mx-auto">
                       <MonitorUp className="w-8 h-8" />
                     </div>
+                    <div className="space-y-1">
+                      <p className="text-sm font-bold text-slate-800">
+                        大螢幕故障？直接將畫面推送到學生 iPad！
+                      </p>
+                      <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                        擷取教師當前的電子書、PPT 或教材畫面，支援多頁翻頁、學生自由溫習與下課一鍵清空。
+                      </p>
+                    </div>
+
                     <button
-                      onClick={handleCaptureAndBroadcast}
+                      onClick={handleCaptureNewSlide}
                       disabled={snappingScreen}
                       className="w-full py-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-xs flex items-center justify-center space-x-2 active:scale-95 disabled:opacity-50"
                     >
@@ -362,7 +465,158 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({ room, onUpdateRoom }
                       ) : (
                         <>
                           <Camera className="w-4 h-4" />
-                          <span>開始擷取並推播至全班</span>
+                          <span>開始擷取第 1 頁講義</span>
+                        </>
+                      )}
+                    </button>
+
+                    <div className="text-[11px] text-slate-400 bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-left">
+                      💡 採用超高壓縮比 WebP（每頁僅 ~40KB），且下課銷毀時自動清空，嚴守免費帳號配額。
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3.5">
+                    {/* Slide Image Preview with current index overlay */}
+                    <div className="relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-950 flex items-center justify-center min-h-[180px] max-h-56">
+                      <img
+                        src={deck.slides[deck.currentIndex]}
+                        alt={`Slide ${deck.currentIndex + 1}`}
+                        className="max-h-52 w-auto object-contain rounded-xl"
+                      />
+                      <div className="absolute top-2.5 left-2.5 px-2.5 py-1 rounded-full bg-black/70 backdrop-blur-xs text-white text-xs font-bold flex items-center space-x-1">
+                        <Layers className="w-3 h-3 text-indigo-400" />
+                        <span>
+                          第 {deck.currentIndex + 1} / {deck.slides.length} 頁
+                        </span>
+                      </div>
+                      <div className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-full bg-emerald-500/90 text-white text-[10px] font-bold">
+                        全班推送中
+                      </div>
+                    </div>
+
+                    {/* Slide Navigation Bar (上一頁 / 下一頁 / 頁碼點) */}
+                    <div className="flex items-center justify-between bg-slate-50 p-2 rounded-2xl border border-slate-200/80">
+                      <button
+                        onClick={handlePrevSlide}
+                        disabled={deck.currentIndex === 0}
+                        className="px-3 py-1.5 rounded-xl bg-white text-slate-700 font-bold text-xs hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none flex items-center space-x-1 border border-slate-200 shadow-2xs"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                        <span>上一頁</span>
+                      </button>
+
+                      {/* Slide Thumbnail Dots / Pills */}
+                      <div className="flex items-center space-x-1 overflow-x-auto max-w-[190px] py-0.5 px-1 scrollbar-none">
+                        {deck.slides.map((_, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => handleSelectSlide(idx)}
+                            className={`w-6 h-6 rounded-lg text-[11px] font-bold transition flex items-center justify-center flex-shrink-0 ${
+                              idx === deck.currentIndex
+                                ? 'bg-indigo-600 text-white shadow-xs'
+                                : 'bg-white hover:bg-slate-200 text-slate-600 border border-slate-200'
+                            }`}
+                          >
+                            {idx + 1}
+                          </button>
+                        ))}
+                      </div>
+
+                      <button
+                        onClick={handleNextSlide}
+                        disabled={deck.currentIndex >= deck.slides.length - 1}
+                        className="px-3 py-1.5 rounded-xl bg-white text-slate-700 font-bold text-xs hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none flex items-center space-x-1 border border-slate-200 shadow-2xs"
+                      >
+                        <span>下一頁</span>
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {/* Slide Manipulation: Add next slide OR Recapture this slide */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={handleCaptureNewSlide}
+                        disabled={snappingScreen || deck.slides.length >= 25}
+                        className="py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-xs disabled:opacity-50"
+                      >
+                        {snappingScreen ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>擷取中...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="w-4 h-4" />
+                            <span>拍攝下一頁 ({deck.slides.length + 1})</span>
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        onClick={handleRecaptureCurrentSlide}
+                        disabled={snappingScreen}
+                        className="py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center space-x-1.5 disabled:opacity-50"
+                        title="以新快照覆寫目前這頁內容"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>重拍目前這頁</span>
+                      </button>
+                    </div>
+
+                    {/* Mode Control Card: Free review vs Forced sync */}
+                    {deck.mode === 'sync' ? (
+                      <button
+                        onClick={handleToggleMode}
+                        className="w-full p-3 rounded-2xl bg-amber-50 hover:bg-amber-100/80 border border-amber-200 text-amber-900 flex items-center justify-between text-left transition group"
+                      >
+                        <div className="space-y-0.5">
+                          <div className="font-extrabold text-xs flex items-center space-x-1.5 text-amber-800">
+                            <Unlock className="w-3.5 h-3.5 text-amber-600" />
+                            <span>暫停同步：開放學生自由翻頁</span>
+                          </div>
+                          <div className="text-[11px] text-amber-700/80">
+                            學生端可自行在 iPad 上點選上一頁、下一頁自主溫習
+                          </div>
+                        </div>
+                        <span className="px-2.5 py-1 bg-amber-500 group-hover:bg-amber-600 text-white rounded-xl text-xs font-bold shadow-2xs whitespace-nowrap ml-2">
+                          開放自翻
+                        </span>
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleToggleMode}
+                        className="w-full p-3 rounded-2xl bg-emerald-50 hover:bg-emerald-100/80 border border-emerald-300 text-emerald-900 flex items-center justify-between text-left transition group ring-2 ring-emerald-400/40"
+                      >
+                        <div className="space-y-0.5">
+                          <div className="font-extrabold text-xs flex items-center space-x-1.5 text-emerald-800">
+                            <Lock className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>收回主控權：恢復全班強制同步</span>
+                          </div>
+                          <div className="text-[11px] text-emerald-700/80">
+                            立即將所有學生畫面拉回老師目前這頁 (第 {deck.currentIndex + 1} 頁)
+                          </div>
+                        </div>
+                        <span className="px-2.5 py-1 bg-emerald-600 group-hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-2xs whitespace-nowrap ml-2">
+                          收回主控
+                        </span>
+                      </button>
+                    )}
+
+                    {/* End broadcast & purge storage */}
+                    <button
+                      onClick={handleEndAndCleanup}
+                      disabled={isCleaningDeck}
+                      className="w-full py-2.5 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-100 font-bold text-xs flex items-center justify-center space-x-1.5 transition disabled:opacity-50"
+                    >
+                      {isCleaningDeck ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>正在釋放雲端儲存空間...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>結束廣播並清空全部講義 (釋放空間)</span>
                         </>
                       )}
                     </button>
@@ -370,6 +624,7 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({ room, onUpdateRoom }
                 )}
               </div>
             )}
+
 
             {/* Timer Modal */}
             {activeTool === 'timer' && (
