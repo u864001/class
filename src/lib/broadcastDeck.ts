@@ -59,7 +59,8 @@ export async function deleteRoomSlideDeck(roomId: string, slideUrls?: string[]):
     const { data: files } = await supabase.storage.from('class_assets').list(roomId);
     if (files && files.length > 0) {
       for (const f of files) {
-        if (f.name) {
+        // 嚴格限定只清除講義快照 (slide_ 或 screen_ 開頭)，絕不誤刪學生作答畫作！
+        if (f.name && (f.name.startsWith('slide_') || f.name.startsWith('screen_'))) {
           filePaths.push(`${roomId}/${f.name}`);
         }
       }

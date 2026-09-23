@@ -21,7 +21,7 @@ export async function compressAndUploadCanvas(
       try {
         const timestamp = Date.now();
         const randomStr = Math.random().toString(36).substring(2, 7);
-        const filePath = `${roomId}/${fileNamePrefix}_${timestamp}_${randomStr}.webp`;
+        const filePath = `${roomId}/drawings/${fileNamePrefix}_${timestamp}_${randomStr}.webp`;
 
         const { error } = await supabase.storage
           .from('class_assets')

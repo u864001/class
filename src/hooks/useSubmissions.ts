@@ -116,14 +116,18 @@ export function useSubmissions(roomId: string | null, roundId: string | null) {
   }, [submissions]);
 
   // Submit answer (from student with strict deduplication & score protection)
-  const submitAnswer = async (submission: {
-    student_id: string;
-    student_name: string;
-    choice?: string | null;
-    text_answer?: string | null;
-    image_url?: string | null;
-  }) => {
-    if (!roomId || !roundId) return;
+  const submitAnswer = async (
+    submission: {
+      student_id: string;
+      student_name: string;
+      choice?: string | null;
+      text_answer?: string | null;
+      image_url?: string | null;
+    },
+    targetRoundId?: string
+  ) => {
+    const activeRound = targetRoundId || roundId;
+    if (!roomId || !activeRound) return;
 
     // 防止學生連續快點兩次造成並發寫入衝突
     if (isSubmittingRef.current) {
@@ -134,11 +138,11 @@ export function useSubmissions(roomId: string | null, roundId: string | null) {
     try {
       isSubmittingRef.current = true;
 
-      // 嚴格規範學生送出資料結構，不傳入 earned_score（由後端預設或教師批改）
+      // 嚴格規範學生送出資料結構，綁定固定回合 ID，不傳入 earned_score
       const { error } = await supabase.from('submissions').upsert(
         {
           room_id: roomId.toUpperCase(),
-          round_id: roundId,
+          round_id: activeRound,
           student_id: submission.student_id,
           student_name: submission.student_name,
           choice: submission.choice || null,

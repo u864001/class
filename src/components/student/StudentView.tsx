@@ -139,9 +139,11 @@ export const StudentView: React.FC<StudentViewProps> = ({
     return () => clearInterval(interval);
   }, [room?.buzz_active]);
 
-  // Submit Answer
+  // Submit Answer with round isolation
   const handleSubmit = async () => {
     if (!room || !room.current_round_id || submitting) return;
+    // 鎖定當前點擊送出時的固定回合 ID，防止換題時畫作串入下一題
+    const targetRoundId = room.current_round_id;
     setSubmitting(true);
 
     try {
@@ -150,21 +152,27 @@ export const StudentView: React.FC<StudentViewProps> = ({
           alert('請先點選一個選項');
           return;
         }
-        await submitAnswer({
-          student_id: studentId,
-          student_name: studentName,
-          choice: selectedChoice,
-        });
+        await submitAnswer(
+          {
+            student_id: studentId,
+            student_name: studentName,
+            choice: selectedChoice,
+          },
+          targetRoundId
+        );
       } else if (room.question_type === 'text') {
         if (!textAnswer.trim()) {
           alert('請先填寫答案');
           return;
         }
-        await submitAnswer({
-          student_id: studentId,
-          student_name: studentName,
-          text_answer: textAnswer.trim(),
-        });
+        await submitAnswer(
+          {
+            student_id: studentId,
+            student_name: studentName,
+            text_answer: textAnswer.trim(),
+          },
+          targetRoundId
+        );
       } else if (room.question_type === 'image') {
         if (!canvasElement) {
           alert('請在畫布上作畫後送出');
@@ -173,16 +181,19 @@ export const StudentView: React.FC<StudentViewProps> = ({
         const uploadedUrl = await compressAndUploadCanvas(
           canvasElement,
           room.id,
-          `${room.current_round_id}_${studentId}`
+          `${targetRoundId}_${studentId}`
         );
-        await submitAnswer({
-          student_id: studentId,
-          student_name: studentName,
-          image_url: uploadedUrl,
-        });
+        await submitAnswer(
+          {
+            student_id: studentId,
+            student_name: studentName,
+            image_url: uploadedUrl,
+          },
+          targetRoundId
+        );
       }
     } catch (err: any) {
-      alert('送出失敗，請重試：' + err.message);
+      alert('送出失敗，請重試（作答草稿已為您保留）：' + err.message);
     } finally {
       setSubmitting(false);
     }
