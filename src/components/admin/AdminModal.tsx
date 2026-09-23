@@ -337,38 +337,112 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
         {/* Tab Content 1: Roster Editor */}
         {activeTab === 'roster' && (
           <div className="flex-1 overflow-y-auto py-3 space-y-3">
-            {/* Class Pill Selector */}
-            <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 scrollbar-none">
-              {ALL_CLASSES.map((cls) => {
-                const count = roster.filter(
-                  (s) => s.grade === cls.grade && s.class === cls.class
-                ).length;
-                const isSelected = selectedClassKey === cls.key;
-                return (
-                  <button
-                    key={cls.key}
-                    onClick={() => {
-                      setSelectedClassKey(cls.key);
-                      setShowBatchImport(false);
-                    }}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap flex items-center space-x-1 flex-shrink-0 ${
-                      isSelected
-                        ? 'bg-indigo-600 text-white shadow-xs ring-2 ring-indigo-300'
-                        : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-200'
-                    }`}
-                  >
-                    <span>{cls.short}</span>
-                    <span
-                      className={`text-[10px] px-1.5 py-0.2 rounded-full ${
-                        isSelected ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-500'
-                      }`}
-                    >
-                      {count}
-                    </span>
-                  </button>
-                );
-              })}
+            {/* Class Selector: Dropdown + 2-Row Grid (甲班列 / 乙班列) */}
+            <div className="space-y-2 bg-slate-50/90 p-2.5 rounded-2xl border border-slate-200/80">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-700 flex items-center space-x-1.5">
+                  <Users className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>選擇編修班級：</span>
+                </span>
+                {/* Dropdown for quick jump */}
+                <select
+                  value={selectedClassKey}
+                  onChange={(e) => {
+                    setSelectedClassKey(e.target.value);
+                    setShowBatchImport(false);
+                  }}
+                  className="px-2.5 py-1 rounded-xl bg-white border border-slate-200 text-xs font-bold text-indigo-700 shadow-2xs outline-none focus:border-indigo-500"
+                >
+                  {ALL_CLASSES.map((cls) => {
+                    const count = roster.filter(
+                      (s) => s.grade === cls.grade && s.class === cls.class
+                    ).length;
+                    return (
+                      <option key={cls.key} value={cls.key}>
+                        {cls.label} ({count}人)
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              {/* Row 1: 甲班 1~6 年級 */}
+              <div className="flex items-center space-x-1">
+                <span className="text-[10px] font-extrabold text-slate-400 w-8 flex-shrink-0 text-center">
+                  甲班
+                </span>
+                <div className="grid grid-cols-6 gap-1 flex-1">
+                  {ALL_CLASSES.filter((c) => c.class === '1').map((cls) => {
+                    const count = roster.filter(
+                      (s) => s.grade === cls.grade && s.class === cls.class
+                    ).length;
+                    const isSelected = selectedClassKey === cls.key;
+                    return (
+                      <button
+                        key={cls.key}
+                        onClick={() => {
+                          setSelectedClassKey(cls.key);
+                          setShowBatchImport(false);
+                        }}
+                        className={`py-1 px-1 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-0.5 ${
+                          isSelected
+                            ? 'bg-indigo-600 text-white shadow-xs ring-2 ring-indigo-300'
+                            : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
+                        }`}
+                      >
+                        <span>{cls.short}</span>
+                        <span
+                          className={`text-[9px] px-1 rounded-full ${
+                            isSelected ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-400'
+                          }`}
+                        >
+                          {count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Row 2: 乙班 1~6 年級 */}
+              <div className="flex items-center space-x-1">
+                <span className="text-[10px] font-extrabold text-slate-400 w-8 flex-shrink-0 text-center">
+                  乙班
+                </span>
+                <div className="grid grid-cols-6 gap-1 flex-1">
+                  {ALL_CLASSES.filter((c) => c.class === '2').map((cls) => {
+                    const count = roster.filter(
+                      (s) => s.grade === cls.grade && s.class === cls.class
+                    ).length;
+                    const isSelected = selectedClassKey === cls.key;
+                    return (
+                      <button
+                        key={cls.key}
+                        onClick={() => {
+                          setSelectedClassKey(cls.key);
+                          setShowBatchImport(false);
+                        }}
+                        className={`py-1 px-1 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-0.5 ${
+                          isSelected
+                            ? 'bg-indigo-600 text-white shadow-xs ring-2 ring-indigo-300'
+                            : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
+                        }`}
+                      >
+                        <span>{cls.short}</span>
+                        <span
+                          className={`text-[9px] px-1 rounded-full ${
+                            isSelected ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-400'
+                          }`}
+                        >
+                          {count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
+
 
             {/* Current Class Header & Action buttons */}
             <div className="flex items-center justify-between bg-slate-50 p-2.5 rounded-2xl border border-slate-200/80">
