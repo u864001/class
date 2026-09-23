@@ -1,0 +1,608 @@
+[
+  {
+    "grade": "1",
+    "class": "1",
+    "number": "1",
+    "name": "陳琰"
+  },
+  {
+    "grade": "1",
+    "class": "1",
+    "number": "2",
+    "name": "胡恪語"
+  },
+  {
+    "grade": "1",
+    "class": "1",
+    "number": "3",
+    "name": "步何若菲"
+  },
+  {
+    "grade": "1",
+    "class": "1",
+    "number": "4",
+    "name": "盧瑜恩"
+  },
+  {
+    "grade": "2",
+    "class": "1",
+    "number": "1",
+    "name": "杜雷諾"
+  },
+  {
+    "grade": "2",
+    "class": "1",
+    "number": "2",
+    "name": "巴嘉祐"
+  },
+  {
+    "grade": "2",
+    "class": "1",
+    "number": "3",
+    "name": "包祈恩"
+  },
+  {
+    "grade": "2",
+    "class": "1",
+    "number": "4",
+    "name": "電喜樂"
+  },
+  {
+    "grade": "2",
+    "class": "1",
+    "number": "5",
+    "name": "康宜"
+  },
+  {
+    "grade": "2",
+    "class": "1",
+    "number": "6",
+    "name": "杜蕙瑄"
+  },
+  {
+    "grade": "3",
+    "class": "1",
+    "number": "1",
+    "name": "巴甯"
+  },
+  {
+    "grade": "3",
+    "class": "1",
+    "number": "2",
+    "name": "巴豫"
+  },
+  {
+    "grade": "3",
+    "class": "1",
+    "number": "3",
+    "name": "田雨柔"
+  },
+  {
+    "grade": "3",
+    "class": "1",
+    "number": "4",
+    "name": "蔡仲彥"
+  },
+  {
+    "grade": "3",
+    "class": "1",
+    "number": "5",
+    "name": "李采妮"
+  },
+  {
+    "grade": "4",
+    "class": "1",
+    "number": "1",
+    "name": "巴嘉彥"
+  },
+  {
+    "grade": "4",
+    "class": "1",
+    "number": "2",
+    "name": "傅以謙"
+  },
+  {
+    "grade": "4",
+    "class": "1",
+    "number": "3",
+    "name": "麥斯芮"
+  },
+  {
+    "grade": "4",
+    "class": "1",
+    "number": "4",
+    "name": "梁歆妮"
+  },
+  {
+    "grade": "4",
+    "class": "1",
+    "number": "5",
+    "name": "康琳"
+  },
+  {
+    "grade": "4",
+    "class": "1",
+    "number": "6",
+    "name": "麥佑新"
+  },
+  {
+    "grade": "4",
+    "class": "1",
+    "number": "7",
+    "name": "麥恩婷"
+  },
+  {
+    "grade": "5",
+    "class": "1",
+    "number": "1",
+    "name": "田雨恩"
+  },
+  {
+    "grade": "5",
+    "class": "1",
+    "number": "2",
+    "name": "宋以諾"
+  },
+  {
+    "grade": "5",
+    "class": "1",
+    "number": "3",
+    "name": "王子翔"
+  },
+  {
+    "grade": "5",
+    "class": "1",
+    "number": "4",
+    "name": "李愷樂"
+  },
+  {
+    "grade": "5",
+    "class": "1",
+    "number": "5",
+    "name": "巴以禾"
+  },
+  {
+    "grade": "5",
+    "class": "1",
+    "number": "6",
+    "name": "馮鄀熙"
+  },
+  {
+    "grade": "6",
+    "class": "1",
+    "number": "1",
+    "name": "麥樂"
+  },
+  {
+    "grade": "6",
+    "class": "1",
+    "number": "2",
+    "name": "顏皓權"
+  },
+  {
+    "grade": "6",
+    "class": "1",
+    "number": "3",
+    "name": "麥伊莫"
+  },
+  {
+    "grade": "6",
+    "class": "1",
+    "number": "4",
+    "name": "瑪發里‧阿希漾"
+  },
+  {
+    "grade": "6",
+    "class": "1",
+    "number": "5",
+    "name": "包庭安"
+  },
+  {
+    "grade": "6",
+    "class": "1",
+    "number": "6",
+    "name": "蔡恩真"
+  },
+  {
+    "grade": "1",
+    "class": "2",
+    "number": "1",
+    "name": "王天闊"
+  },
+  {
+    "grade": "1",
+    "class": "2",
+    "number": "2",
+    "name": "潘昀亮"
+  },
+  {
+    "grade": "1",
+    "class": "2",
+    "number": "3",
+    "name": "包皓亦"
+  },
+  {
+    "grade": "1",
+    "class": "2",
+    "number": "4",
+    "name": "張剴郡"
+  },
+  {
+    "grade": "1",
+    "class": "2",
+    "number": "5",
+    "name": "佘啟煜"
+  },
+  {
+    "grade": "1",
+    "class": "2",
+    "number": "6",
+    "name": "林品鑫"
+  },
+  {
+    "grade": "1",
+    "class": "2",
+    "number": "7",
+    "name": "唐承裕"
+  },
+  {
+    "grade": "1",
+    "class": "2",
+    "number": "8",
+    "name": "楊維晏"
+  },
+  {
+    "grade": "1",
+    "class": "2",
+    "number": "9",
+    "name": "柯書誠"
+  },
+  {
+    "grade": "1",
+    "class": "2",
+    "number": "10",
+    "name": "陳美晨"
+  },
+  {
+    "grade": "1",
+    "class": "2",
+    "number": "11",
+    "name": "羅泱澄"
+  },
+  {
+    "grade": "2",
+    "class": "2",
+    "number": "1",
+    "name": "宋懷恩"
+  },
+  {
+    "grade": "2",
+    "class": "2",
+    "number": "2",
+    "name": "盧柏瑞"
+  },
+  {
+    "grade": "2",
+    "class": "2",
+    "number": "3",
+    "name": "宋祐安"
+  },
+  {
+    "grade": "2",
+    "class": "2",
+    "number": "4",
+    "name": "麥伊甯"
+  },
+  {
+    "grade": "3",
+    "class": "2",
+    "number": "1",
+    "name": "黃佳霓"
+  },
+  {
+    "grade": "3",
+    "class": "2",
+    "number": "2",
+    "name": "張艾爾"
+  },
+  {
+    "grade": "3",
+    "class": "2",
+    "number": "3",
+    "name": "柯書權"
+  },
+  {
+    "grade": "3",
+    "class": "2",
+    "number": "4",
+    "name": "馬睿恩"
+  },
+  {
+    "grade": "3",
+    "class": "2",
+    "number": "5",
+    "name": "陳恩耀"
+  },
+  {
+    "grade": "3",
+    "class": "2",
+    "number": "6",
+    "name": "杜星"
+  },
+  {
+    "grade": "3",
+    "class": "2",
+    "number": "7",
+    "name": "李允齊"
+  },
+  {
+    "grade": "3",
+    "class": "2",
+    "number": "8",
+    "name": "顏凱恩"
+  },
+  {
+    "grade": "3",
+    "class": "2",
+    "number": "9",
+    "name": "歐宥歆"
+  },
+  {
+    "grade": "3",
+    "class": "2",
+    "number": "10",
+    "name": "武順安"
+  },
+  {
+    "grade": "4",
+    "class": "2",
+    "number": "1",
+    "name": "杜妍夏"
+  },
+  {
+    "grade": "4",
+    "class": "2",
+    "number": "2",
+    "name": "柯芷若"
+  },
+  {
+    "grade": "4",
+    "class": "2",
+    "number": "4",
+    "name": "唐晨萲"
+  },
+  {
+    "grade": "4",
+    "class": "2",
+    "number": "5",
+    "name": "徐亞晨"
+  },
+  {
+    "grade": "4",
+    "class": "2",
+    "number": "6",
+    "name": "湯婕瑜"
+  },
+  {
+    "grade": "4",
+    "class": "2",
+    "number": "8",
+    "name": "歐宥翔"
+  },
+  {
+    "grade": "4",
+    "class": "2",
+    "number": "9",
+    "name": "杜玹"
+  },
+  {
+    "grade": "4",
+    "class": "2",
+    "number": "11",
+    "name": "佘品翰"
+  },
+  {
+    "grade": "4",
+    "class": "2",
+    "number": "12",
+    "name": "歐宥飛"
+  },
+  {
+    "grade": "4",
+    "class": "2",
+    "number": "13",
+    "name": "洪宇岳"
+  },
+  {
+    "grade": "4",
+    "class": "2",
+    "number": "14",
+    "name": "施予翔"
+  },
+  {
+    "grade": "5",
+    "class": "2",
+    "number": "1",
+    "name": "池丞俊"
+  },
+  {
+    "grade": "5",
+    "class": "2",
+    "number": "2",
+    "name": "麥少齊"
+  },
+  {
+    "grade": "5",
+    "class": "2",
+    "number": "3",
+    "name": "陳恩宇"
+  },
+  {
+    "grade": "5",
+    "class": "2",
+    "number": "4",
+    "name": "顏凱倫"
+  },
+  {
+    "grade": "5",
+    "class": "2",
+    "number": "5",
+    "name": "張宇安"
+  },
+  {
+    "grade": "5",
+    "class": "2",
+    "number": "6",
+    "name": "麥里奧"
+  },
+  {
+    "grade": "5",
+    "class": "2",
+    "number": "7",
+    "name": "麥允浩"
+  },
+  {
+    "grade": "5",
+    "class": "2",
+    "number": "8",
+    "name": "張艾斯"
+  },
+  {
+    "grade": "5",
+    "class": "2",
+    "number": "9",
+    "name": "杜佑謙"
+  },
+  {
+    "grade": "5",
+    "class": "2",
+    "number": "10",
+    "name": "巴天"
+  },
+  {
+    "grade": "5",
+    "class": "2",
+    "number": "11",
+    "name": "胡靚恩"
+  },
+  {
+    "grade": "5",
+    "class": "2",
+    "number": "12",
+    "name": "賴微格"
+  },
+  {
+    "grade": "5",
+    "class": "2",
+    "number": "13",
+    "name": "許可蕾"
+  },
+  {
+    "grade": "5",
+    "class": "2",
+    "number": "14",
+    "name": "康愛"
+  },
+  {
+    "grade": "5",
+    "class": "2",
+    "number": "15",
+    "name": "孫瀅瀅"
+  },
+  {
+    "grade": "5",
+    "class": "2",
+    "number": "16",
+    "name": "麥睿恩"
+  },
+  {
+    "grade": "5",
+    "class": "2",
+    "number": "17",
+    "name": "阮翔恩"
+  },
+  {
+    "grade": "5",
+    "class": "2",
+    "number": "18",
+    "name": "杜迦勒"
+  },
+  {
+    "grade": "5",
+    "class": "2",
+    "number": "19",
+    "name": "李茉櫟"
+  },
+  {
+    "grade": "6",
+    "class": "2",
+    "number": "1",
+    "name": "張艾妮"
+  },
+  {
+    "grade": "6",
+    "class": "2",
+    "number": "2",
+    "name": "李家蓁"
+  },
+  {
+    "grade": "6",
+    "class": "2",
+    "number": "3",
+    "name": "巴昕燁"
+  },
+  {
+    "grade": "6",
+    "class": "2",
+    "number": "4",
+    "name": "陳以晴"
+  },
+  {
+    "grade": "6",
+    "class": "2",
+    "number": "5",
+    "name": "杜怡樂"
+  },
+  {
+    "grade": "6",
+    "class": "2",
+    "number": "6",
+    "name": "杜憫加"
+  },
+  {
+    "grade": "6",
+    "class": "2",
+    "number": "7",
+    "name": "柯大沅"
+  },
+  {
+    "grade": "6",
+    "class": "2",
+    "number": "8",
+    "name": "陳宇豪"
+  },
+  {
+    "grade": "6",
+    "class": "2",
+    "number": "9",
+    "name": "巴虎"
+  },
+  {
+    "grade": "6",
+    "class": "2",
+    "number": "10",
+    "name": "張以熙"
+  },
+  {
+    "grade": "6",
+    "class": "2",
+    "number": "11",
+    "name": "柯佳諾"
+  },
+  {
+    "grade": "6",
+    "class": "2",
+    "number": "12",
+    "name": "曾子謙"
+  }
+]
