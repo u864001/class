@@ -20,6 +20,7 @@ import {
   Monitor,
   ChevronLeft,
   ChevronRight,
+  Crown,
 } from 'lucide-react';
 import { Room } from '../../types';
 import { useRoom } from '../../hooks/useRoom';
@@ -71,6 +72,23 @@ export const StudentView: React.FC<StudentViewProps> = ({
   // Poll states
   const [selectedVoteOption, setSelectedVoteOption] = useState<string | null>(null);
   const [voteSubmitted, setVoteSubmitted] = useState(false);
+  const [dismissVoteResults, setDismissVoteResults] = useState(false);
+
+  // 當老師發起新一輪投票時，自動重置學生端投票狀態
+  useEffect(() => {
+    if (room?.vote_active) {
+      setVoteSubmitted(false);
+      setSelectedVoteOption(null);
+      setDismissVoteResults(false);
+    }
+  }, [room?.vote_active]);
+
+  // 當老師結束投票並公布結果時，若有結果資料則自動開啟結果視窗
+  useEffect(() => {
+    if (!room?.vote_active && room?.vote_results && Object.keys(room.vote_results).length > 0) {
+      setDismissVoteResults(false);
+    }
+  }, [room?.vote_active, room?.vote_results]);
 
   // Broadcast image & slide deck modal
   const deck = parseBroadcastDeck(room?.broadcast_image_url);
@@ -523,6 +541,85 @@ export const StudentView: React.FC<StudentViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Overlay 3.5: Published Poll Results to Student */}
+      {!room.vote_active &&
+        room.vote_results &&
+        Object.keys(room.vote_results).length > 0 &&
+        !dismissVoteResults && (() => {
+          const totalVotes = Object.values(room.vote_results).reduce((a, b) => a + b, 0);
+          const maxVotes = Math.max(0, ...Object.values(room.vote_results));
+          const winners = Object.keys(room.vote_results).filter(
+            (opt) => room.vote_results[opt] === maxVotes && maxVotes > 0
+          );
+
+          return (
+            <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-4">
+              <div className="glass-panel max-w-sm w-full rounded-3xl p-6 space-y-4 text-center border border-white/80 shadow-2xl">
+                <div className="flex items-center justify-center space-x-2 text-indigo-600 font-extrabold text-base">
+                  <Vote className="w-5 h-5" />
+                  <span>📊 全班投票結果已公布！</span>
+                </div>
+
+                <div className="text-xs text-slate-500 font-semibold">
+                  全班共累計投出 <strong className="text-indigo-600 font-mono text-sm">{totalVotes}</strong> 票
+                  {winners.length > 0 && (
+                    <div className="text-amber-600 font-bold mt-1">
+                      👑 最高得票：{winners.join(', ')} ({maxVotes} 票)
+                    </div>
+                  )}
+                </div>
+
+                {/* Result Bar List */}
+                <div className="space-y-2.5 text-left max-h-60 overflow-y-auto pr-1">
+                  {Object.entries(room.vote_results).map(([opt, count]) => {
+                    const pct = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
+                    const isWinner = winners.includes(opt);
+
+                    return (
+                      <div
+                        key={opt}
+                        className={`p-3 rounded-2xl border transition-all ${
+                          isWinner
+                            ? 'bg-amber-50/80 border-amber-300 ring-2 ring-amber-400/30'
+                            : 'bg-white border-slate-200'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1.5 text-xs font-bold">
+                          <div className="flex items-center space-x-1.5">
+                            {isWinner && <Crown className="w-3.5 h-3.5 text-amber-500 fill-current" />}
+                            <span className={isWinner ? 'text-amber-900 font-black' : 'text-slate-700'}>
+                              {opt}
+                            </span>
+                          </div>
+                          <div className="font-mono text-xs">
+                            <span className="text-slate-400 mr-1.5">{pct}%</span>
+                            <span className="text-indigo-600 font-extrabold">{count} 票</span>
+                          </div>
+                        </div>
+                        <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                          <div
+                            style={{ width: `${pct}%` }}
+                            className={`h-full rounded-full transition-all duration-300 ${
+                              isWinner ? 'bg-amber-500' : 'bg-indigo-600'
+                            }`}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <button
+                  onClick={() => setDismissVoteResults(true)}
+                  className="w-full py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold text-sm shadow-xs transition"
+                >
+                  我知道了 (關閉)
+                </button>
+              </div>
+            </div>
+          );
+        })()}
 
       {/* Overlay 4: Teacher Broadcasted Screen Snapshot Slide Deck */}
       {room.broadcast_image_url && !dismissBroadcastImage && (() => {

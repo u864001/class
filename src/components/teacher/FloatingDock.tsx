@@ -14,6 +14,9 @@ import {
   X,
   Plus,
   Play,
+  Pause,
+  Clock,
+  CheckCircle2,
   RotateCcw,
   Sparkles,
   MonitorUp,
@@ -34,7 +37,7 @@ import {
   Trophy,
   Flame,
 } from 'lucide-react';
-import { Room, RoomStudent, BuzzEntry } from '../../types';
+import { Room, RoomStudent, BuzzEntry, VoteEntry } from '../../types';
 import { supabase } from '../../lib/supabase';
 import { captureScreenSlide } from '../../lib/imageCompressor';
 import {
@@ -46,7 +49,7 @@ import {
 import { LiveJoinLobbyModal } from './LiveJoinLobbyModal';
 
 // Web Audio API 音效產生器（免依賴外部音檔，跨平台穩定發聲）
-const playSound = (type: 'dice' | 'tick' | 'ding' | 'winner' | 'buzz_go') => {
+const playSound = (type: 'dice' | 'tick' | 'ding' | 'winner' | 'buzz_go' | 'times_up') => {
   try {
     const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
     if (type === 'dice') {
@@ -84,6 +87,19 @@ const playSound = (type: 'dice' | 'tick' | 'ding' | 'winner' | 'buzz_go') => {
       gain.connect(ctx.destination);
       osc.start();
       osc.stop(ctx.currentTime + 0.25);
+    } else if (type === 'times_up') {
+      [880, 880, 880, 1174.66].forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.16);
+        gain.gain.setValueAtTime(0.2, ctx.currentTime + i * 0.16);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + i * 0.16 + 0.14);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(ctx.currentTime + i * 0.16);
+        osc.stop(ctx.currentTime + i * 0.16 + 0.14);
+      });
     } else if (type === 'winner' || type === 'ding') {
       [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
         const osc = ctx.createOscillator();
@@ -159,9 +175,10 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
   const [snappingScreen, setSnappingScreen] = useState(false);
   const [isCleaningDeck, setIsCleaningDeck] = useState(false);
 
-  // Timer tool local state
-  const [timerVal, setTimerVal] = useState(60);
-  const [timerRunning, setTimerRunning] = useState(false);
+  // Timer tool state (獨立倒數 + 紅暈警示 + 時間到)
+  const [timerSetSeconds, setTimerSetSeconds] = useState(60);
+  const [timerRemaining, setTimerRemaining] = useState(60);
+  const [timerStatus, setTimerStatus] = useState<'idle' | 'running' | 'paused' | 'times_up'>('idle');
 
   // Dice state (大尺寸 + 歷史投擲紀錄)
   const [diceNum, setDiceNum] = useState<number | null>(null);
@@ -186,9 +203,20 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
   const isDraggingRef = useRef(false);
   const dragOffsetRef = useRef({ x: 0, y: 0 });
 
-  // Poll local state
+  // Poll state (即時長條圖統計 + 投送學生端 + 歷史紀錄 + 最高票標記)
+  const [pollQuestion, setPollQuestion] = useState('全班即時投票');
   const [pollOptions, setPollOptions] = useState<string[]>(['選項 A', '選項 B']);
-  const [newOption, setNewOption] = useState('');
+  const [pollVotes, setPollVotes] = useState<VoteEntry[]>([]);
+  const [pollTab, setPollTab] = useState<'active' | 'history'>('active');
+  const [pollHistory, setPollHistory] = useState<{
+    id: string;
+    question: string;
+    options: string[];
+    results: Record<string, number>;
+    totalVotes: number;
+    highestOptions: string[];
+    endedAt: string;
+  }[]>([]);
 
   // Broadcast local state
   const [broadcastInput, setBroadcastInput] = useState(room.broadcast_text || '');
@@ -576,16 +604,203 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
     };
   }, []);
 
-  const startPoll = async () => {
+  // --- 5. 課堂獨立計時器控制 ---
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (timerStatus === 'running') {
+      interval = setInterval(() => {
+        setTimerRemaining((prev) => {
+          if (prev <= 1) {
+            setTimerStatus('times_up');
+            playSound('times_up');
+            return 0;
+          }
+          if (prev <= 6) {
+            playSound('tick');
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [timerStatus]);
+
+  const handleStartTimer = (secs?: number) => {
+    const s = secs !== undefined ? secs : timerSetSeconds;
+    setTimerRemaining(s);
+    setTimerStatus('running');
+  };
+
+  const handlePauseTimer = () => {
+    setTimerStatus('paused');
+  };
+
+  const handleResumeTimer = () => {
+    setTimerStatus('running');
+  };
+
+  const handleResetTimer = () => {
+    setTimerStatus('idle');
+    setTimerRemaining(timerSetSeconds);
+  };
+
+  const handleSetTimerDuration = (secs: number) => {
+    setTimerSetSeconds(secs);
+    setTimerRemaining(secs);
+    setTimerStatus('idle');
+  };
+
+  const handleAddTimerSeconds = (extra: number) => {
+    if (timerStatus === 'running' || timerStatus === 'paused') {
+      setTimerRemaining((prev) => Math.max(1, prev + extra));
+    } else {
+      setTimerSetSeconds((prev) => Math.max(10, prev + extra));
+      setTimerRemaining((prev) => Math.max(10, prev + extra));
+    }
+  };
+
+  // --- 6. 全班即時投票控制（Realtime監聽 + 長條圖 + 皇冠 + 投送學生 + 歷史紀錄） ---
+  useEffect(() => {
+    if (!room?.id) return;
+    const normalizedRoomId = room.id.toUpperCase();
+
+    const channel = supabase
+      .channel(`votes_dock_${normalizedRoomId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'votes', filter: `room_id=eq.${normalizedRoomId}` },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            const entry = payload.new as VoteEntry;
+            setPollVotes((prev) => {
+              const idx = prev.findIndex((v) => v.student_id === entry.student_id);
+              if (idx >= 0) {
+                const next = [...prev];
+                next[idx] = entry;
+                return next;
+              }
+              return [...prev, entry];
+            });
+            playSound('tick');
+          } else if (payload.eventType === 'UPDATE') {
+            const entry = payload.new as VoteEntry;
+            setPollVotes((prev) => {
+              const idx = prev.findIndex((v) => v.student_id === entry.student_id);
+              if (idx >= 0) {
+                const next = [...prev];
+                next[idx] = entry;
+                return next;
+              }
+              return [...prev, entry];
+            });
+          } else if (payload.eventType === 'DELETE') {
+            const del = payload.old as { student_id?: string };
+            if (del?.student_id) {
+              setPollVotes((prev) => prev.filter((v) => v.student_id !== del.student_id));
+            } else {
+              setPollVotes([]);
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [room?.id]);
+
+  useEffect(() => {
+    if (activeTool === 'vote' && room?.id) {
+      supabase
+        .from('votes')
+        .select('*')
+        .eq('room_id', room.id.toUpperCase())
+        .then(({ data }) => {
+          if (data) {
+            setPollVotes(data as VoteEntry[]);
+          }
+        });
+    }
+  }, [activeTool, room?.id]);
+
+  const currentVoteOptions = useMemo(() => {
+    return room.vote_options && room.vote_options.length > 0 ? room.vote_options : pollOptions;
+  }, [room.vote_options, pollOptions]);
+
+  // 各選項得票計算
+  const voteTallies = useMemo(() => {
+    const counts: Record<string, number> = {};
+    currentVoteOptions.forEach((opt) => {
+      counts[opt] = 0;
+    });
+    pollVotes.forEach((v) => {
+      if (counts[v.option] !== undefined) {
+        counts[v.option] += 1;
+      }
+    });
+    return counts;
+  }, [currentVoteOptions, pollVotes]);
+
+  const totalPollVotes = pollVotes.length;
+
+  // 最高得票選項（可能並列多個最高票）
+  const highestVotedOptions = useMemo(() => {
+    const maxVotes = Math.max(0, ...Object.values(voteTallies));
+    if (maxVotes === 0) return [];
+    return currentVoteOptions.filter((opt) => voteTallies[opt] === maxVotes);
+  }, [currentVoteOptions, voteTallies]);
+
+  // 發起新投票（自動清空 DB 舊票並重置房間投票狀態）
+  const startNewPoll = async () => {
+    if (!room?.id) return;
+    const cleanRoomId = room.id.toUpperCase();
+
+    // 1. 清空後端資料表舊票
+    try {
+      await supabase.from('votes').delete().eq('room_id', cleanRoomId);
+    } catch (e) {
+      console.warn('Error clearing votes table:', e);
+    }
+    setPollVotes([]);
+
+    // 2. 開啟新輪次投票並推播至學生端
+    const initialResults: Record<string, number> = {};
+    pollOptions.forEach((opt) => {
+      initialResults[opt] = 0;
+    });
+
     await onUpdateRoom({
       vote_active: true,
       vote_options: pollOptions,
-      vote_results: pollOptions.reduce((acc, opt) => ({ ...acc, [opt]: 0 }), {}),
+      vote_results: initialResults,
     });
+    setPollTab('active');
+    playSound('ding');
   };
 
-  const stopPoll = async () => {
-    await onUpdateRoom({ vote_active: false });
+  // 結束並公布結果至學生機
+  const stopAndPublishPoll = async () => {
+    if (!room?.id) return;
+
+    // 1. 存入歷史投票清單
+    const historyItem = {
+      id: Date.now().toString(36),
+      question: pollQuestion || '全班即時投票',
+      options: currentVoteOptions,
+      results: voteTallies,
+      totalVotes: totalPollVotes,
+      highestOptions: highestVotedOptions,
+      endedAt: new Date().toLocaleTimeString(),
+    };
+    setPollHistory((prev) => [historyItem, ...prev]);
+
+    // 2. 投送至學生端
+    await onUpdateRoom({
+      vote_active: false,
+      vote_results: voteTallies,
+    });
+    playSound('winner');
   };
 
   const studentJoinUrl = `${window.location.origin}?room=${room.id}`;
@@ -716,7 +931,11 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
             className={`glass-panel ${
               activeTool === 'group'
                 ? 'max-w-2xl sm:max-w-3xl'
-                : activeTool === 'screenshare' || activeTool === 'buzz' || activeTool === 'picker'
+                : activeTool === 'screenshare' ||
+                  activeTool === 'buzz' ||
+                  activeTool === 'picker' ||
+                  activeTool === 'vote' ||
+                  activeTool === 'timer'
                 ? 'max-w-lg'
                 : 'max-w-md'
             } w-full rounded-3xl p-6 shadow-soft relative border border-white/80 max-h-[90vh] overflow-y-auto`}
@@ -995,24 +1214,229 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
             )}
 
 
-            {/* Timer Modal */}
+            {/* 5. 課堂獨立計時器（巨型倒數 + 10s/5s 呼吸紅暈燈警示 + 音效 + TIME'S UP 結束大畫面） */}
             {activeTool === 'timer' && (
-              <div className="text-center space-y-4 pt-2">
-                <h3 className="font-extrabold text-slate-800 text-lg">課堂獨立計時器</h3>
-                <div className="text-5xl font-mono font-black text-indigo-600 py-4">
-                  {timerVal} <span className="text-lg text-slate-400 font-sans font-normal">秒</span>
+              <div className="text-center space-y-5 pt-2">
+                <div className="flex items-center justify-center space-x-2">
+                  <Timer className="w-6 h-6 text-indigo-600" />
+                  <h3 className="font-extrabold text-slate-800 text-xl">課堂獨立計時器</h3>
                 </div>
-                <div className="flex justify-center space-x-2">
-                  {[30, 60, 120, 300].map((s) => (
-                    <button
-                      key={s}
-                      onClick={() => setTimerVal(s)}
-                      className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50"
-                    >
-                      {s >= 60 ? `${s / 60}分` : `${s}秒`}
-                    </button>
-                  ))}
-                </div>
+
+                {/* State 1: TIME'S UP (時間到震撼畫面) */}
+                {timerStatus === 'times_up' && (
+                  <div className="py-7 px-4 rounded-3xl bg-gradient-to-b from-rose-500 via-red-500 to-rose-600 text-white shadow-2xl animate-pulse space-y-3">
+                    <div className="flex items-center justify-center space-x-2 text-rose-100 font-extrabold text-sm uppercase tracking-widest">
+                      <Clock className="w-5 h-5 animate-spin" />
+                      <span>TIME'S UP!</span>
+                      <Clock className="w-5 h-5 animate-spin" />
+                    </div>
+                    <div className="text-6xl sm:text-7xl font-black font-mono tracking-tight drop-shadow-md">
+                      00:00
+                    </div>
+                    <div className="text-2xl sm:text-3xl font-black text-yellow-300 drop-shadow-sm">
+                      ⏰ 時間到！
+                    </div>
+                    <p className="text-xs text-rose-100/90 max-w-xs mx-auto">
+                      請同學們停筆或結束目前活動
+                    </p>
+                    <div className="pt-2 flex items-center justify-center space-x-2">
+                      <button
+                        onClick={() => handleStartTimer(timerSetSeconds)}
+                        className="px-5 py-3 rounded-2xl bg-white text-rose-600 hover:bg-rose-50 font-black text-sm shadow-lg transition active:scale-95 flex items-center space-x-1.5"
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                        <span>再計一次 ({timerSetSeconds >= 60 ? `${Math.floor(timerSetSeconds / 60)}分${timerSetSeconds % 60 ? `${timerSetSeconds % 60}秒` : ''}` : `${timerSetSeconds}秒`})</span>
+                      </button>
+                      <button
+                        onClick={handleResetTimer}
+                        className="px-4 py-3 rounded-2xl bg-rose-700/60 hover:bg-rose-800 text-white font-bold text-sm transition"
+                      >
+                        重設時間
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* State 2: Running or Paused (進行中或暫停) */}
+                {(timerStatus === 'running' || timerStatus === 'paused') && (() => {
+                  const minutes = Math.floor(timerRemaining / 60);
+                  const seconds = timerRemaining % 60;
+                  const formatted = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+                  const isCritical = timerRemaining <= 10;
+                  const isUltraCritical = timerRemaining <= 5;
+
+                  return (
+                    <div className="space-y-4">
+                      {/* Big Display Box with breathing red halo when <= 10s */}
+                      <div
+                        className={`py-8 px-4 rounded-3xl border transition-all duration-300 flex flex-col items-center justify-center ${
+                          isCritical
+                            ? 'bg-rose-50/90 border-rose-400 ring-8 ring-rose-500/25 shadow-glow-rose animate-pulse'
+                            : 'bg-slate-50 border-slate-200'
+                        }`}
+                      >
+                        <div className="text-xs font-extrabold uppercase tracking-widest mb-1">
+                          {isUltraCritical ? (
+                            <span className="text-rose-600 animate-bounce flex items-center space-x-1">
+                              <span>🔥 最後倒數衝刺！</span>
+                            </span>
+                          ) : isCritical ? (
+                            <span className="text-rose-600 flex items-center space-x-1">
+                              <span>⚠️ 即將結束</span>
+                            </span>
+                          ) : (
+                            <span className="text-indigo-600 font-bold">
+                              {timerStatus === 'running' ? '⏳ 計時進行中' : '⏸ 已暫停'}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Huge Digits */}
+                        <div
+                          className={`text-6xl sm:text-7xl font-mono font-black tracking-tight ${
+                            isCritical ? 'text-rose-600 scale-105' : 'text-indigo-600'
+                          }`}
+                        >
+                          {formatted}
+                        </div>
+
+                        <div className="text-[11px] font-bold text-slate-400 mt-2">
+                          總設定：{Math.floor(timerSetSeconds / 60)}分{timerSetSeconds % 60 ? `${timerSetSeconds % 60}秒` : ''}
+                        </div>
+                      </div>
+
+                      {/* Primary Play/Pause/Reset Controls */}
+                      <div className="grid grid-cols-2 gap-2">
+                        {timerStatus === 'running' ? (
+                          <button
+                            onClick={handlePauseTimer}
+                            className="py-3.5 rounded-2xl bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-black text-sm shadow-xs transition flex items-center justify-center space-x-2"
+                          >
+                            <Pause className="w-5 h-5 fill-current" />
+                            <span>暫停</span>
+                          </button>
+                        ) : (
+                          <button
+                            onClick={handleResumeTimer}
+                            className="py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-sm shadow-xs transition flex items-center justify-center space-x-2"
+                          >
+                            <Play className="w-5 h-5 fill-current" />
+                            <span>繼續計時</span>
+                          </button>
+                        )}
+
+                        <button
+                          onClick={handleResetTimer}
+                          className="py-3.5 rounded-2xl bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 font-bold text-sm transition flex items-center justify-center space-x-1.5"
+                        >
+                          <RotateCcw className="w-4 h-4" />
+                          <span>重設時間</span>
+                        </button>
+                      </div>
+
+                      {/* Quick Add Time Pills */}
+                      <div className="flex items-center justify-center space-x-2 pt-1 border-t border-slate-100">
+                        <span className="text-xs text-slate-400 font-semibold">快速加時：</span>
+                        {[10, 30, 60].map((addSec) => (
+                          <button
+                            key={addSec}
+                            onClick={() => handleAddTimerSeconds(addSec)}
+                            className="px-3 py-1.5 rounded-xl bg-slate-50 hover:bg-indigo-50 border border-slate-200 text-xs font-bold text-indigo-600 hover:border-indigo-300 transition"
+                          >
+                            +{addSec >= 60 ? `${addSec / 60}分` : `${addSec}秒`}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* State 3: Idle (選擇與設定時間) */}
+                {timerStatus === 'idle' && (() => {
+                  const minutes = Math.floor(timerRemaining / 60);
+                  const seconds = timerRemaining % 60;
+                  const formatted = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+
+                  return (
+                    <div className="space-y-4">
+                      {/* Big Target Preview */}
+                      <div className="py-6 px-4 rounded-3xl bg-slate-50 border border-slate-200 flex flex-col items-center justify-center">
+                        <div className="text-5xl sm:text-6xl font-mono font-black text-indigo-600 tracking-tight">
+                          {formatted}
+                        </div>
+                        <div className="text-xs font-bold text-slate-400 mt-2">
+                          預設倒數時長：{timerRemaining >= 60 ? `${Math.floor(timerRemaining / 60)} 分鐘` : ''}{timerRemaining % 60 ? ` ${timerRemaining % 60} 秒` : ''}
+                        </div>
+                      </div>
+
+                      {/* Presets Grid */}
+                      <div className="space-y-1.5">
+                        <div className="text-xs text-slate-400 font-semibold text-left px-1">常用時長：</div>
+                        <div className="grid grid-cols-4 gap-2">
+                          {[30, 60, 120, 180, 300, 600, 900, 1200].map((s) => (
+                            <button
+                              key={s}
+                              onClick={() => handleSetTimerDuration(s)}
+                              className={`py-2 rounded-xl text-xs font-bold transition border ${
+                                timerSetSeconds === s
+                                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs ring-2 ring-indigo-500/20'
+                                  : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
+                              }`}
+                            >
+                              {s >= 60 ? `${s / 60} 分` : `${s} 秒`}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* +/- Quick Tuning */}
+                      <div className="flex items-center justify-center space-x-2 py-1">
+                        <span className="text-xs text-slate-400 font-semibold">微調：</span>
+                        <button
+                          onClick={() => handleAddTimerSeconds(-30)}
+                          disabled={timerRemaining <= 30}
+                          className="px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-bold text-slate-600 disabled:opacity-40"
+                        >
+                          -30秒
+                        </button>
+                        <button
+                          onClick={() => handleAddTimerSeconds(-10)}
+                          disabled={timerRemaining <= 10}
+                          className="px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-bold text-slate-600 disabled:opacity-40"
+                        >
+                          -10秒
+                        </button>
+                        <button
+                          onClick={() => handleAddTimerSeconds(10)}
+                          className="px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-bold text-slate-600"
+                        >
+                          +10秒
+                        </button>
+                        <button
+                          onClick={() => handleAddTimerSeconds(30)}
+                          className="px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-bold text-slate-600"
+                        >
+                          +30秒
+                        </button>
+                        <button
+                          onClick={() => handleAddTimerSeconds(60)}
+                          className="px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-bold text-slate-600"
+                        >
+                          +1分
+                        </button>
+                      </div>
+
+                      {/* Big Start Button */}
+                      <button
+                        onClick={() => handleStartTimer()}
+                        className="w-full py-4 rounded-2xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-black text-base shadow-glow-indigo transition flex items-center justify-center space-x-2"
+                      >
+                        <Play className="w-5 h-5 fill-current" />
+                        <span>開始倒數計時！</span>
+                      </button>
+                    </div>
+                  );
+                })()}
               </div>
             )}
 
@@ -1434,50 +1858,364 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
               </div>
             )}
 
-            {/* Poll / Voting */}
+            {/* 6. 全班即時投票（長條圖即時統計 + 👑最高得票/並列 + 投送學生端 + 歷史紀錄回顧） */}
             {activeTool === 'vote' && (
               <div className="space-y-4 pt-2">
-                <h3 className="font-extrabold text-slate-800 text-lg">即時投票</h3>
-                <div className="space-y-2">
-                  {pollOptions.map((opt, idx) => (
-                    <div key={idx} className="flex items-center space-x-2">
-                      <input
-                        type="text"
-                        value={opt}
-                        onChange={(e) => {
-                          const next = [...pollOptions];
-                          next[idx] = e.target.value;
-                          setPollOptions(next);
-                        }}
-                        className="flex-1 px-3 py-1.5 rounded-xl border border-slate-200 text-xs text-slate-800"
-                      />
+                {/* Header & Tabs */}
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <div className="flex items-center space-x-2">
+                    <Vote className="w-6 h-6 text-indigo-600" />
+                    <h3 className="font-extrabold text-slate-800 text-xl">全班即時投票</h3>
+                  </div>
+
+                  {/* Tab Selector */}
+                  <div className="bg-slate-100 p-1 rounded-2xl flex items-center space-x-1 text-xs font-bold">
+                    <button
+                      onClick={() => setPollTab('active')}
+                      className={`px-3 py-1 rounded-xl transition ${
+                        pollTab === 'active'
+                          ? 'bg-white text-indigo-600 shadow-2xs'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      即時投票
+                    </button>
+                    <button
+                      onClick={() => setPollTab('history')}
+                      className={`px-3 py-1 rounded-xl transition flex items-center space-x-1 ${
+                        pollTab === 'history'
+                          ? 'bg-white text-indigo-600 shadow-2xs'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      <History className="w-3 h-3" />
+                      <span>歷史紀錄 ({pollHistory.length})</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Tab 1: 即時投票 */}
+                {pollTab === 'active' && (
+                  <div className="space-y-4">
+                    {/* Mode A: 投票進行中 (room.vote_active) */}
+                    {room.vote_active ? (
+                      <div className="space-y-4">
+                        {/* Live Status Banner */}
+                        <div className="flex items-center justify-between bg-indigo-50/80 border border-indigo-200/80 rounded-2xl px-4 py-3">
+                          <div className="flex items-center space-x-2">
+                            <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
+                            <span className="font-extrabold text-xs text-indigo-900">
+                              投票進行中（學生機開放作答中）
+                            </span>
+                          </div>
+                          <div className="text-xs font-bold text-indigo-700 font-mono">
+                            已收票：<strong className="text-base text-indigo-900">{totalPollVotes}</strong> 票
+                          </div>
+                        </div>
+
+                        {/* Poll Question Display */}
+                        <div className="font-extrabold text-base text-slate-800 px-1">
+                          {pollQuestion || '全班即時投票'}
+                        </div>
+
+                        {/* Live Bar Chart Display */}
+                        <div className="space-y-2.5">
+                          {currentVoteOptions.map((opt) => {
+                            const count = voteTallies[opt] || 0;
+                            const pct = totalPollVotes > 0 ? Math.round((count / totalPollVotes) * 100) : 0;
+                            const isWinner = highestVotedOptions.includes(opt) && count > 0;
+
+                            return (
+                              <div
+                                key={opt}
+                                className={`p-3 rounded-2xl border transition-all ${
+                                  isWinner
+                                    ? 'bg-gradient-to-r from-amber-50/90 to-yellow-50/40 border-amber-300 ring-2 ring-amber-400/40'
+                                    : 'bg-white border-slate-200'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between mb-1.5 text-xs font-bold">
+                                  <div className="flex items-center space-x-1.5">
+                                    {isWinner && (
+                                      <span className="flex items-center space-x-1 text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full text-[10px] font-black">
+                                        <Crown className="w-3 h-3 fill-current" />
+                                        <span>領先</span>
+                                      </span>
+                                    )}
+                                    <span className="text-slate-800 text-sm font-extrabold">{opt}</span>
+                                  </div>
+                                  <div className="flex items-center space-x-2 font-mono">
+                                    <span className="text-slate-400 text-xs">{pct}%</span>
+                                    <span className="text-indigo-600 font-extrabold text-sm">{count} 票</span>
+                                  </div>
+                                </div>
+
+                                {/* Progress bar */}
+                                <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
+                                  <div
+                                    style={{ width: `${pct}%` }}
+                                    className={`h-full rounded-full transition-all duration-300 ${
+                                      isWinner
+                                        ? 'bg-gradient-to-r from-amber-400 to-amber-500'
+                                        : 'bg-indigo-600'
+                                    }`}
+                                  />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* End & Publish Button */}
+                        <button
+                          onClick={stopAndPublishPoll}
+                          className="w-full py-4 rounded-2xl bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-black text-sm shadow-xs transition flex items-center justify-center space-x-2"
+                        >
+                          <Crown className="w-4 h-4 fill-current" />
+                          <span>結束投票並公布結果 (投送至全班學生機)</span>
+                        </button>
+                      </div>
+                    ) : room.vote_results && Object.keys(room.vote_results).length > 0 ? (
+                      /* Mode B: 剛結束並已公布結果給學生 */
+                      <div className="space-y-4">
+                        <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-center space-y-1">
+                          <div className="flex items-center justify-center space-x-1.5 text-emerald-700 font-extrabold text-sm">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                            <span>投票結果已成功公布並投送至全班學生機！</span>
+                          </div>
+                          <div className="text-xs text-emerald-700/80">
+                            共收集 {totalPollVotes} 票
+                            {highestVotedOptions.length > 0 && (
+                              <span className="font-bold ml-1">
+                                · 👑 最高得票：{highestVotedOptions.join(', ')} ({voteTallies[highestVotedOptions[0]]} 票)
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Final Result Bars */}
+                        <div className="space-y-2.5">
+                          {currentVoteOptions.map((opt) => {
+                            const count = voteTallies[opt] || 0;
+                            const pct = totalPollVotes > 0 ? Math.round((count / totalPollVotes) * 100) : 0;
+                            const isWinner = highestVotedOptions.includes(opt) && count > 0;
+
+                            return (
+                              <div
+                                key={opt}
+                                className={`p-3 rounded-2xl border transition-all ${
+                                  isWinner
+                                    ? 'bg-amber-50/80 border-amber-300 ring-2 ring-amber-400/40'
+                                    : 'bg-white border-slate-200'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between mb-1.5 text-xs font-bold">
+                                  <div className="flex items-center space-x-1.5">
+                                    {isWinner && (
+                                      <span className="flex items-center space-x-1 text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full text-[10px] font-black">
+                                        <Crown className="w-3 h-3 fill-current" />
+                                        <span>獲勝</span>
+                                      </span>
+                                    )}
+                                    <span className="text-slate-800 text-sm font-extrabold">{opt}</span>
+                                  </div>
+                                  <div className="flex items-center space-x-2 font-mono">
+                                    <span className="text-slate-400 text-xs">{pct}%</span>
+                                    <span className="text-indigo-600 font-extrabold text-sm">{count} 票</span>
+                                  </div>
+                                </div>
+                                <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
+                                  <div
+                                    style={{ width: `${pct}%` }}
+                                    className={`h-full rounded-full ${
+                                      isWinner ? 'bg-amber-500' : 'bg-indigo-600'
+                                    }`}
+                                  />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Start New Round Button */}
+                        <button
+                          onClick={startNewPoll}
+                          className="w-full py-4 rounded-2xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-black text-sm shadow-glow-indigo transition flex items-center justify-center space-x-2"
+                        >
+                          <RotateCcw className="w-4 h-4" />
+                          <span>🔄 發起全新一輪投票 (重設學生端狀態)</span>
+                        </button>
+                      </div>
+                    ) : (
+                      /* Mode C: 編輯題目與選項並發起投票 */
+                      <div className="space-y-4">
+                        {/* Question Input */}
+                        <div className="space-y-1">
+                          <label className="text-xs text-slate-500 font-bold block text-left">
+                            投票題目或說明：
+                          </label>
+                          <input
+                            type="text"
+                            value={pollQuestion}
+                            onChange={(e) => setPollQuestion(e.target.value)}
+                            placeholder="例如：您是否贊成明天的戶外教學？"
+                            className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-bold text-slate-800 focus:border-indigo-500 outline-none"
+                          />
+                        </div>
+
+                        {/* Quick Presets */}
+                        <div className="flex items-center space-x-2 text-xs">
+                          <span className="text-slate-400 font-semibold">快速範本：</span>
+                          <button
+                            type="button"
+                            onClick={() => setPollOptions(['贊成 / 同意', '反對 / 不同意', '沒意見 / 棄權'])}
+                            className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold"
+                          >
+                            贊成/反對
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPollOptions(['選項 A', '選項 B', '選項 C', '選項 D'])}
+                            className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold"
+                          >
+                            ABCD
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPollOptions(['1', '2', '3'])}
+                            className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold"
+                          >
+                            123
+                          </button>
+                        </div>
+
+                        {/* Options List */}
+                        <div className="space-y-2">
+                          <label className="text-xs text-slate-500 font-bold block text-left">
+                            選項內容：
+                          </label>
+                          {pollOptions.map((opt, idx) => (
+                            <div key={idx} className="flex items-center space-x-2">
+                              <span className="w-6 text-center text-xs font-mono font-bold text-slate-400">
+                                {idx + 1}.
+                              </span>
+                              <input
+                                type="text"
+                                value={opt}
+                                onChange={(e) => {
+                                  const next = [...pollOptions];
+                                  next[idx] = e.target.value;
+                                  setPollOptions(next);
+                                }}
+                                className="flex-1 px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-800 focus:border-indigo-500 outline-none"
+                              />
+                              {pollOptions.length > 2 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setPollOptions(pollOptions.filter((_, i) => i !== idx))}
+                                  className="p-1.5 text-slate-300 hover:text-rose-500 rounded-lg hover:bg-rose-50"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+
+                          {pollOptions.length < 8 && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setPollOptions([
+                                  ...pollOptions,
+                                  `選項 ${String.fromCharCode(65 + pollOptions.length)}`,
+                                ])
+                              }
+                              className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center space-x-1 pt-1"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>新增選項</span>
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Start Button */}
+                        <button
+                          onClick={startNewPoll}
+                          className="w-full py-4 rounded-2xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-black text-base shadow-glow-indigo transition flex items-center justify-center space-x-2"
+                        >
+                          <Vote className="w-5 h-5" />
+                          <span>🚀 發起全班即時投票</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Tab 2: 歷史投票紀錄 */}
+                {pollTab === 'history' && (
+                  <div className="space-y-3 text-left">
+                    <div className="flex items-center justify-between text-xs text-slate-400 font-semibold px-1">
+                      <span>已儲存 {pollHistory.length} 次投票紀錄</span>
+                      {pollHistory.length > 0 && (
+                        <button
+                          onClick={() => setPollHistory([])}
+                          className="text-slate-400 hover:text-rose-600 transition underline text-[11px]"
+                        >
+                          清空歷史紀錄
+                        </button>
+                      )}
                     </div>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => setPollOptions([...pollOptions, `選項 ${String.fromCharCode(65 + pollOptions.length)}`])}
-                    className="text-xs font-semibold text-indigo-600 hover:underline"
-                  >
-                    + 新增選項
-                  </button>
-                </div>
-                <div className="flex space-x-2 pt-2">
-                  {room.vote_active ? (
-                    <button
-                      onClick={stopPoll}
-                      className="w-full py-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs"
-                    >
-                      結束並公布結果
-                    </button>
-                  ) : (
-                    <button
-                      onClick={startPoll}
-                      className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs"
-                    >
-                      發起全班即時投票
-                    </button>
-                  )}
-                </div>
+
+                    {pollHistory.length === 0 ? (
+                      <div className="py-8 text-center text-slate-400 text-xs font-semibold">
+                        尚無歷史投票紀錄，每次結束投票後會自動保存於此。
+                      </div>
+                    ) : (
+                      <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+                        {pollHistory.map((item) => (
+                          <div
+                            key={item.id}
+                            className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2 text-xs"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-extrabold text-slate-800 text-sm truncate">
+                                {item.question}
+                              </span>
+                              <span className="text-[11px] font-mono text-slate-400">{item.endedAt}</span>
+                            </div>
+
+                            <div className="text-[11px] text-slate-500">
+                              共 {item.totalVotes} 票
+                              {item.highestOptions.length > 0 && (
+                                <span className="text-amber-700 font-bold ml-1">
+                                  · 👑 獲勝：{item.highestOptions.join(', ')} ({item.results[item.highestOptions[0]] || 0} 票)
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="space-y-1 pt-1 border-t border-slate-200/60">
+                              {item.options.map((opt) => {
+                                const cnt = item.results[opt] || 0;
+                                const pct = item.totalVotes > 0 ? Math.round((cnt / item.totalVotes) * 100) : 0;
+                                const isWin = item.highestOptions.includes(opt) && cnt > 0;
+                                return (
+                                  <div key={opt} className="flex items-center justify-between text-[11px]">
+                                    <span className={isWin ? 'font-bold text-amber-900' : 'text-slate-600'}>
+                                      {isWin ? '👑 ' : ''}{opt}
+                                    </span>
+                                    <span className="font-mono text-slate-400 font-semibold">
+                                      {cnt} 票 ({pct}%)
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
