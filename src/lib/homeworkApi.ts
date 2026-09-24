@@ -325,6 +325,20 @@ export async function uploadStudentHomeworkImage(
   const cleanQId = questionId.replace(/[^a-zA-Z0-9_-]/g, '');
   const cleanStuId = studentId.replace(/[^a-zA-Z0-9_-]/g, '');
 
+  // 1. Guard: Check if student has locked this assignment before allowing storage upload
+  const lockRoundId = cleanAsgId !== 'ASG_DEFAULT' ? `${cleanAsgId}_LOCK` : LOCK_ROUND_ID;
+  const { data: lockCheck } = await supabase
+    .from('submissions')
+    .select('id')
+    .eq('room_id', cleanRoomId)
+    .eq('round_id', lockRoundId)
+    .eq('student_id', cleanStuId)
+    .maybeSingle();
+
+  if (lockCheck) {
+    throw new Error('作答已確認鎖定，禁止再次上傳或替換作品圖檔！');
+  }
+
   let canvas: HTMLCanvasElement;
 
   if (source instanceof HTMLCanvasElement) {
