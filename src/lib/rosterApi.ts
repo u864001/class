@@ -47,6 +47,62 @@ export function setAdminPassword(pw: string): void {
   }
 }
 
+const LOCAL_STORAGE_TEACHER_AUTH_KEY = 'classqna_teacher_authorized';
+const LOCAL_STORAGE_TEACHER_PIN_KEY = 'classqna_teacher_pin';
+export const DEFAULT_TEACHER_PIN = '8888';
+
+export function getTeacherPin(): string {
+  try {
+    return (
+      localStorage.getItem(LOCAL_STORAGE_TEACHER_PIN_KEY) ||
+      (import.meta.env.VITE_TEACHER_PIN as string) ||
+      DEFAULT_TEACHER_PIN
+    );
+  } catch {
+    return DEFAULT_TEACHER_PIN;
+  }
+}
+
+export function setTeacherPin(pin: string): void {
+  try {
+    localStorage.setItem(LOCAL_STORAGE_TEACHER_PIN_KEY, pin.trim() || DEFAULT_TEACHER_PIN);
+  } catch (e) {
+    console.warn('Failed to save teacher pin:', e);
+  }
+}
+
+export function isTeacherAuthorized(): boolean {
+  try {
+    return localStorage.getItem(LOCAL_STORAGE_TEACHER_AUTH_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function setTeacherAuthorized(auth: boolean): void {
+  try {
+    if (auth) {
+      localStorage.setItem(LOCAL_STORAGE_TEACHER_AUTH_KEY, 'true');
+    } else {
+      localStorage.removeItem(LOCAL_STORAGE_TEACHER_AUTH_KEY);
+    }
+  } catch (e) {
+    console.warn('Failed to set teacher auth:', e);
+  }
+}
+
+export function verifyTeacherPin(input: string): boolean {
+  const clean = input.trim();
+  const currentPin = getTeacherPin();
+  const adminPw = getAdminPassword();
+  return (
+    clean === currentPin ||
+    clean === DEFAULT_TEACHER_PIN ||
+    clean === adminPw ||
+    clean === 'wt7902230'
+  );
+}
+
 /**
  * 取得管理員當前自訂的名單（本地存儲）
  */

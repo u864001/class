@@ -4,10 +4,14 @@ import { TeacherView } from './components/teacher/TeacherView';
 import { StudentJoin } from './components/student/StudentJoin';
 import { StudentView } from './components/student/StudentView';
 import { StudentHomeworkView } from './components/student/homework/StudentHomeworkView';
+import { TeacherAuthModal } from './components/teacher/TeacherAuthModal';
+import { isTeacherAuthorized } from './lib/rosterApi';
 import { useTheme } from './context/ThemeContext';
 
 export const App: React.FC = () => {
   const [role, setRole] = useState<'teacher' | 'student'>('teacher');
+  const [isStudentLocked, setIsStudentLocked] = useState(false);
+  const [showTeacherAuthModal, setShowTeacherAuthModal] = useState(false);
   const [studentSession, setStudentSession] = useState<{
     roomId: string;
     studentId: string;
@@ -24,12 +28,53 @@ export const App: React.FC = () => {
     const roomParam = params.get('room');
     const roleParam = params.get('role');
 
-    if (roomParam) {
+    if (roleParam === 'student' || roomParam) {
+      // Direct student entrance via QR Code / Shared Link:
+      // Completely locks student view and hides all teacher toggle controls
       setRole('student');
+      setIsStudentLocked(true);
     } else if (roleParam === 'teacher') {
-      setRole('teacher');
+      if (isTeacherAuthorized()) {
+        setRole('teacher');
+        setIsStudentLocked(false);
+      } else {
+        setRole('student');
+        setIsStudentLocked(false);
+        setShowTeacherAuthModal(true);
+      }
+    } else {
+      // Default entrance without query params:
+      // If this device was already verified as teacher, land on teacher view.
+      // Otherwise, default safely to student mode (with PIN guard to switch).
+      if (isTeacherAuthorized()) {
+        setRole('teacher');
+        setIsStudentLocked(false);
+      } else {
+        setRole('student');
+        setIsStudentLocked(false);
+      }
     }
   }, []);
+
+  const handleSwitchRole = (targetRole: 'teacher' | 'student') => {
+    if (targetRole === 'student') {
+      setRole('student');
+    } else {
+      if (isTeacherAuthorized()) {
+        setRole('teacher');
+        setStudentSession(null);
+      } else {
+        setShowTeacherAuthModal(true);
+      }
+    }
+  };
+
+  const handleTeacherAuthSuccess = () => {
+    setShowTeacherAuthModal(false);
+    setRole('teacher');
+    setStudentSession(null);
+    setIsStudentLocked(false);
+  };
 
   const queryRoom = new URLSearchParams(window.location.search).get('room') || '';
 
@@ -38,15 +83,20 @@ export const App: React.FC = () => {
       {/* Universal Top Header */}
       <Header
         role={role}
-        onSwitchRole={(r) => {
-          setRole(r);
-          if (r === 'teacher') setStudentSession(null);
-        }}
+        hideRoleSwitch={isStudentLocked}
+        onSwitchRole={handleSwitchRole}
         onExitRoom={
           studentSession
             ? () => setStudentSession(null)
             : undefined
         }
+      />
+
+      {/* Teacher Authentication Modal */}
+      <TeacherAuthModal
+        isOpen={showTeacherAuthModal}
+        onClose={() => setShowTeacherAuthModal(false)}
+        onSuccess={handleTeacherAuthSuccess}
       />
 
       {/* Optional Halloween decorative floating badge */}

@@ -796,7 +796,7 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
     playSound('winner');
   };
 
-  const studentJoinUrl = `${window.location.origin}?room=${room.id}`;
+  const studentJoinUrl = `${window.location.origin}${window.location.pathname}?role=student&room=${room.id}`;
 
   return (
     <>

@@ -21,7 +21,8 @@ interface HeaderProps {
   room?: Room | null;
   onlineCount?: number;
   role: 'teacher' | 'student';
-  onSwitchRole: (role: 'teacher' | 'student') => void;
+  hideRoleSwitch?: boolean;
+  onSwitchRole?: (role: 'teacher' | 'student') => void;
   onExitRoom?: () => void;
 }
 
@@ -29,6 +30,7 @@ export const Header: React.FC<HeaderProps> = ({
   room,
   onlineCount = 0,
   role,
+  hideRoleSwitch = false,
   onSwitchRole,
   onExitRoom,
 }) => {
@@ -244,7 +246,7 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 <LogOut className="w-4 h-4" />
               </button>
-            ) : (
+            ) : !hideRoleSwitch && onSwitchRole ? (
               <div className="flex items-center p-0.5 rounded-xl bg-slate-100/80 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 text-xs font-semibold">
                 <button
                   onClick={() => onSwitchRole('teacher')}
@@ -267,7 +269,7 @@ export const Header: React.FC<HeaderProps> = ({
                   {t('header.studentRole')}
                 </button>
               </div>
-            )}
+            ) : null}
           </div>
         </div>
       </header>

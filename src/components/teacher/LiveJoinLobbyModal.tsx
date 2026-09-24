@@ -156,7 +156,7 @@ export const LiveJoinLobbyModal: React.FC<LiveJoinLobbyModalProps> = ({
 
   if (!isOpen) return null;
 
-  const studentJoinUrl = `${window.location.origin}${window.location.pathname}?room=${room.id}`;
+  const studentJoinUrl = `${window.location.origin}${window.location.pathname}?role=student&room=${room.id}`;
 
   const displayedList =
     activeTab === 'joined' ? joinedStudents : activeTab === 'unjoined' ? unjoinedStudents : lobbyStudents;

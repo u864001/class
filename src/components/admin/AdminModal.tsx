@@ -29,6 +29,9 @@ import {
   setStoredSchoolName,
   getAdminPassword,
   setAdminPassword,
+  getTeacherPin,
+  setTeacherPin,
+  setTeacherAuthorized,
   formatClassLabel,
 } from '../../lib/rosterApi';
 import { deleteRoomSlideDeck } from '../../lib/broadcastDeck';
@@ -70,6 +73,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
   // Settings state
   const [schoolNameInput, setSchoolNameInput] = useState('');
   const [adminPwInput, setAdminPwInput] = useState('');
+  const [teacherPinInput, setTeacherPinInput] = useState('');
   const [settingsSaved, setSettingsSaved] = useState(false);
 
   // Maintenance state
@@ -82,6 +86,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
       setRoster(getCustomRoster());
       setSchoolNameInput(getStoredSchoolName());
       setAdminPwInput(getAdminPassword());
+      setTeacherPinInput(getTeacherPin());
       setSaveSuccess(false);
       setSettingsSaved(false);
     }
@@ -232,6 +237,9 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
     }
     if (adminPwInput.trim()) {
       setAdminPassword(adminPwInput.trim());
+    }
+    if (teacherPinInput.trim()) {
+      setTeacherPin(teacherPinInput.trim());
     }
     setSettingsSaved(true);
     setTimeout(() => setSettingsSaved(false), 2000);
@@ -636,6 +644,36 @@ export const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose }) => {
                 type="text"
                 value={adminPwInput}
                 onChange={(e) => setAdminPwInput(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-mono font-bold text-slate-800 outline-none focus:border-indigo-500"
+              />
+            </div>
+
+            {/* Teacher PIN Card */}
+            <div className="p-4 rounded-2xl bg-white border border-slate-200 space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="font-extrabold text-xs text-slate-800 flex items-center space-x-1.5">
+                  <Key className="w-4 h-4 text-indigo-500" />
+                  <span>教師通行碼 (Teacher PIN)</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTeacherAuthorized(false);
+                    alert('已解除本機教師授權，下次進入教師端需重新輸入通行碼！');
+                  }}
+                  className="text-[11px] text-rose-500 hover:text-rose-600 font-semibold hover:underline"
+                >
+                  解除此裝置教師授權
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                學生端切換至教師端時所需驗證之通行碼。預設為 <code className="bg-slate-100 px-1 py-0.5 rounded font-mono">8888</code>，輸入後可記住裝置免重複輸入。
+              </p>
+              <input
+                type="text"
+                value={teacherPinInput}
+                onChange={(e) => setTeacherPinInput(e.target.value)}
+                placeholder="8888"
                 className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-mono font-bold text-slate-800 outline-none focus:border-indigo-500"
               />
             </div>
