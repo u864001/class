@@ -255,6 +255,7 @@ export const en = {
     waitingQuestion: 'Waiting for teacher to publish question...',
     teacherBroadcasting: 'Teacher is broadcasting a slide',
     screenLockedMsg: 'Screen is locked by the teacher. Please look at the board!',
+    marqueePlaceholder: 'Live Broadcast Channel (Waiting for broadcast)',
     // Student answering
     questionNum: 'Question #{num}',
     scorePts: '{pts} pts',

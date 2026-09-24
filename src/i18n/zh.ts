@@ -255,6 +255,7 @@ export const zh = {
     waitingQuestion: '正在等待老師出題...',
     teacherBroadcasting: '老師正在廣播講義畫面',
     screenLockedMsg: '螢幕目前由老師統一鎖定，請專心看黑板！',
+    marqueePlaceholder: '課堂即時廣播頻道（等待老師推播）',
     // Student answering
     questionNum: '第 {num} 題',
     scorePts: '{pts} 分',

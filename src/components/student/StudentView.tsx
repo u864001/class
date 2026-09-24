@@ -264,9 +264,9 @@ export const StudentView: React.FC<StudentViewProps> = ({
   }
 
   return (
-    <div className="max-w-md mx-auto px-4 py-4 space-y-4 pb-12">
+    <div className="max-w-md mx-auto px-3 sm:px-4 py-2 sm:py-3 space-y-2.5 sm:space-y-3 pb-4">
       {/* Student Top Mini Bar */}
-      <div className="glass-panel px-4 py-2.5 rounded-2xl flex items-center justify-between shadow-xs border border-white/60 dark:border-slate-700">
+      <div className="glass-panel px-4 py-2 rounded-2xl flex items-center justify-between shadow-xs border border-white/60 dark:border-slate-700">
         <div className="flex items-center space-x-2">
           <div className="w-7 h-7 rounded-xl badge-theme font-extrabold text-xs flex items-center justify-center font-mono">
             {studentId.replace('temp_', '')}
@@ -315,16 +315,28 @@ export const StudentView: React.FC<StudentViewProps> = ({
         </div>
       </div>
 
-      {/* Marquee Broadcast Banner */}
-      {room.broadcast_text && (
-        <div className="px-4 py-2.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-xs font-semibold flex items-center space-x-2 animate-pulse overflow-hidden">
-          <Megaphone className="w-4 h-4 text-amber-600 flex-shrink-0" />
-          <span className="font-bold truncate">{room.broadcast_text}</span>
-        </div>
-      )}
+      {/* Marquee Broadcast Banner - Fixed Height Reserved Slot to Prevent Screen Shifting */}
+      <div
+        className={`h-9 px-3.5 rounded-2xl text-xs font-semibold flex items-center space-x-2 transition-all duration-300 overflow-hidden ${
+          room.broadcast_text
+            ? 'bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 animate-pulse shadow-xs'
+            : 'bg-white/40 dark:bg-slate-800/40 border border-white/50 dark:border-slate-700/50 text-slate-400 dark:text-slate-500'
+        }`}
+      >
+        <Megaphone
+          className={`w-4 h-4 flex-shrink-0 ${
+            room.broadcast_text
+              ? 'text-amber-600 dark:text-amber-400 animate-bounce'
+              : 'text-slate-400 dark:text-slate-500'
+          }`}
+        />
+        <span className="font-bold truncate">
+          {room.broadcast_text || t('student.marqueePlaceholder')}
+        </span>
+      </div>
 
       {/* Question Card */}
-      <div className="glass-panel rounded-3xl p-5 sm:p-6 shadow-soft border border-white/60 dark:border-slate-700 space-y-4">
+      <div className="glass-panel rounded-3xl p-4 sm:p-5 shadow-soft border border-white/60 dark:border-slate-700 space-y-3">
         {/* Status indicator / Countdown */}
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
@@ -397,7 +409,7 @@ export const StudentView: React.FC<StudentViewProps> = ({
                       type="button"
                       disabled={!isAnswering || isStopped}
                       onClick={() => setSelectedChoice(opt)}
-                      className={`h-20 rounded-2xl font-black text-2xl transition border active:scale-95 flex items-center justify-center ${
+                      className={`h-16 sm:h-18 rounded-2xl font-black text-2xl transition border active:scale-95 flex items-center justify-center ${
                         isSelected
                           ? 'btn-theme-primary ring-4 ring-indigo-500/20'
                           : isRevealedCorrect
