@@ -11,6 +11,7 @@ import {
   FixedRoomPreset,
 } from '../../lib/homeworkApi';
 import { useI18n } from '../../context/I18nContext';
+import { maskStudentName, generateIndigenousNickname } from '../../lib/nicknameGenerator';
 
 interface StudentJoinProps {
   initialRoomId?: string;
@@ -38,7 +39,7 @@ export const StudentJoin: React.FC<StudentJoinProps> = ({
   const [rosterByClass, setRosterByClass] = useState<Record<string, ClassRosterStudent[]>>({});
   const [selectedClass, setSelectedClass] = useState('');
   const [selectedSeat, setSelectedSeat] = useState('1');
-  const [nickname, setNickname] = useState('');
+  const [nickname, setNickname] = useState(() => generateIndigenousNickname());
 
   // Active Homework Map across all 12 classes: { WT0601: { title, count }, ... }
   const [activeHwMap, setActiveHwMap] = useState<Record<string, { title: string; count: number }>>({});
@@ -441,7 +442,7 @@ export const StudentJoin: React.FC<StudentJoinProps> = ({
                   >
                     {(rosterByClass[selectedClass] || []).map((s) => (
                       <option key={s.number} value={s.number}>
-                        {s.number} 號 - {s.name}
+                        {s.number} 號 - {maskStudentName(s.name)}
                       </option>
                     ))}
                   </select>
@@ -467,15 +468,25 @@ export const StudentJoin: React.FC<StudentJoinProps> = ({
                   </select>
                 </div>
                 <div>
-                  <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 block mb-1">
-                    {t('student.nameLabel')}
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                      {t('student.nameLabel')}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setNickname(generateIndigenousNickname())}
+                      className="text-[11px] font-bold text-theme hover:underline flex items-center space-x-0.5 active:scale-95 transition"
+                      title="隨機換一個原鄉山林動物暱稱"
+                    >
+                      <span>🎲 換山林暱稱</span>
+                    </button>
+                  </div>
                   <input
                     type="text"
                     value={nickname}
                     onChange={(e) => setNickname(e.target.value)}
-                    placeholder="選填姓名"
-                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-800 dark:text-slate-200 outline-none"
+                    placeholder="可自訂姓名或使用山林暱稱"
+                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-slate-200 outline-none"
                   />
                 </div>
               </div>
