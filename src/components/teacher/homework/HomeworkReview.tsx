@@ -15,9 +15,18 @@ import {
   Loader2,
   AlertTriangle,
   ZoomIn,
+  Lock,
+  Unlock,
+  ShieldCheck,
 } from 'lucide-react';
 import { Room, Submission, ClassRosterStudent } from '../../../types';
-import { parseHomework, cleanRoomAllAssetsAndSubmissions } from '../../../lib/homeworkApi';
+import {
+  parseHomework,
+  cleanRoomAllAssetsAndSubmissions,
+  unlockStudentHomework,
+  LOCK_ROUND_ID,
+  LockMetadata,
+} from '../../../lib/homeworkApi';
 import { fetchRoster, formatClassLabel } from '../../../lib/rosterApi';
 import { exportRoomResults } from '../../../lib/exportExcel';
 import { supabase } from '../../../lib/supabase';
@@ -104,10 +113,53 @@ export const HomeworkReview: React.FC<HomeworkReviewProps> = ({
     loadSubmissions();
   }, [room, loadSubmissions]);
 
-  // Group submissions by studentId
+  // Group lock metadata by studentId
+  const lockedStudentsMap = useMemo(() => {
+    const map = new Map<string, LockMetadata>();
+    for (const sub of submissions) {
+      if (sub.round_id === LOCK_ROUND_ID && sub.text_answer) {
+        try {
+          map.set(sub.student_id, JSON.parse(sub.text_answer));
+        } catch {
+          map.set(sub.student_id, {
+            locked: true,
+            locked_at: sub.created_at,
+            device: '未知裝置',
+            deviceId: 'DEV_ANON',
+          });
+        }
+      }
+    }
+    return map;
+  }, [submissions]);
+
+  const [unlockingStudentId, setUnlockingStudentId] = useState<string | null>(null);
+
+  const handleUnlockStudent = async (studentId: string, studentName: string) => {
+    const ok = confirm(t('homework.teacherUnlockConfirm', { name: studentName }));
+    if (!ok) return;
+
+    setUnlockingStudentId(studentId);
+    try {
+      const res = await unlockStudentHomework(room.id, studentId);
+      if (!res.success) throw new Error(res.error || '解鎖失敗');
+
+      setSubmissions((prev) =>
+        prev.filter((s) => !(s.student_id === studentId && s.round_id === LOCK_ROUND_ID))
+      );
+      alert(t('homework.teacherUnlockSuccess', { name: studentName }));
+    } catch (err: any) {
+      alert('解鎖失敗：' + err.message);
+    } finally {
+      setUnlockingStudentId(null);
+    }
+  };
+
+  // Group submissions by studentId (excluding LOCK_ROUND_ID)
   const studentSubmissionsMap = useMemo(() => {
     const map = new Map<string, Map<string, Submission>>();
     for (const sub of submissions) {
+      if (sub.round_id === LOCK_ROUND_ID) continue;
       if (!map.has(sub.student_id)) {
         map.set(sub.student_id, new Map());
       }
@@ -222,7 +274,7 @@ export const HomeworkReview: React.FC<HomeworkReviewProps> = ({
               </span>
               <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
                 {room.selected_classes?.length > 0
-                  ? room.selected_classes.map(formatClassLabel).join(', ')
+                  ? room.selected_classes.map((cls) => formatClassLabel(cls, true)).join(', ')
                   : '自訂座號'}
               </span>
             </div>
@@ -565,6 +617,7 @@ export const HomeworkReview: React.FC<HomeworkReviewProps> = ({
               const subMap = studentSubmissionsMap.get(sId);
               const submittedCount = subMap ? subMap.size : 0;
               const isSelected = selectedStudentId === sId;
+              const isLocked = lockedStudentsMap.has(sId);
 
               return (
                 <button
@@ -576,11 +629,16 @@ export const HomeworkReview: React.FC<HomeworkReviewProps> = ({
                       : 'bg-white/80 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:border-slate-300'
                   }`}
                 >
-                  <span>
-                    {s.number}號 {s.name}
+                  <span className="flex items-center space-x-1.5 truncate pr-1">
+                    <span>
+                      {s.number}號 {s.name}
+                    </span>
+                    {isLocked && (
+                      <Lock className="w-3 h-3 text-amber-500 flex-shrink-0" />
+                    )}
                   </span>
                   <span
-                    className={`text-[10px] px-2 py-0.5 rounded-full ${
+                    className={`text-[10px] px-2 py-0.5 rounded-full flex-shrink-0 ${
                       submittedCount === questions.length && questions.length > 0
                         ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
                         : submittedCount > 0
@@ -622,6 +680,39 @@ export const HomeworkReview: React.FC<HomeworkReviewProps> = ({
                         已繳交 {subMap ? subMap.size : 0} / {questions.length} 題
                       </div>
                     </div>
+
+                    {/* Lock Status & Device Log Banner */}
+                    {lockedStudentsMap.has(selectedStudentId) && (
+                      <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                        <div className="space-y-0.5">
+                          <div className="flex items-center space-x-1.5 font-bold text-amber-800 dark:text-amber-200">
+                            <Lock className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                            <span>該生已確認繳交並鎖定答案</span>
+                          </div>
+                          {(() => {
+                            const meta = lockedStudentsMap.get(selectedStudentId);
+                            return meta ? (
+                              <p className="text-[11px] text-amber-700/80 dark:text-amber-300/80">
+                                鎖定時間：{new Date(meta.locked_at).toLocaleString()} ｜ 裝置：{meta.device} ({meta.deviceId})
+                              </p>
+                            ) : null;
+                          })()}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleUnlockStudent(selectedStudentId, student?.name || '學生')}
+                          disabled={unlockingStudentId === selectedStudentId}
+                          className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs active:scale-95 transition flex items-center space-x-1.5 flex-shrink-0 disabled:opacity-50"
+                        >
+                          {unlockingStudentId === selectedStudentId ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Unlock className="w-3.5 h-3.5" />
+                          )}
+                          <span>{t('homework.teacherUnlockBtn')}</span>
+                        </button>
+                      </div>
+                    )}
 
                     <div className="space-y-3">
                       {questions.map((q) => {
@@ -734,7 +825,19 @@ export const HomeworkReview: React.FC<HomeworkReviewProps> = ({
                       {s.number}
                     </td>
                     <td className="py-2.5 px-2 font-bold text-slate-800 dark:text-slate-100">
-                      {s.name}
+                      <div className="flex items-center space-x-1.5">
+                        <span>{s.name}</span>
+                        {lockedStudentsMap.has(sId) && (
+                          <button
+                            type="button"
+                            onClick={() => handleUnlockStudent(sId, s.name)}
+                            title="學生已鎖定答案（點擊可直接解除鎖定）"
+                            className="text-amber-500 hover:text-amber-600 p-0.5 rounded transition"
+                          >
+                            <Lock className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </td>
                     {questions.map((q) => {
                       const hasSub = subMap?.has(q.id);

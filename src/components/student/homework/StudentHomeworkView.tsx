@@ -16,9 +16,17 @@ import {
   ZoomIn,
   X,
   AlertCircle,
+  Lock,
+  ShieldCheck,
+  ShieldAlert,
 } from 'lucide-react';
 import { Room, Submission, HomeworkQuestion } from '../../../types';
-import { parseHomework } from '../../../lib/homeworkApi';
+import {
+  parseHomework,
+  lockStudentHomework,
+  LOCK_ROUND_ID,
+  LockMetadata,
+} from '../../../lib/homeworkApi';
 import { supabase } from '../../../lib/supabase';
 import { compressAndUploadCanvas, uploadSlideFromFile } from '../../../lib/imageCompressor';
 import { StudentCanvas } from '../StudentCanvas';
@@ -66,6 +74,11 @@ export const StudentHomeworkView: React.FC<StudentHomeworkViewProps> = ({
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
   const [imageInputMode, setImageInputMode] = useState<'draw' | 'photo'>('draw');
 
+  // Homework Lock States
+  const [isLocked, setIsLocked] = useState(false);
+  const [lockMeta, setLockMeta] = useState<LockMetadata | null>(null);
+  const [locking, setLocking] = useState(false);
+
   // Load homework data & student submissions (100% REST, NO WebSocket!)
   useEffect(() => {
     async function loadData() {
@@ -108,6 +121,17 @@ export const StudentHomeworkView: React.FC<StudentHomeworkViewProps> = ({
         if (subsData && subsData.length > 0) {
           const loadedAnswers: typeof answers = {};
           for (const sub of subsData as Submission[]) {
+            if (sub.round_id === LOCK_ROUND_ID) {
+              setIsLocked(true);
+              try {
+                if (sub.text_answer) {
+                  setLockMeta(JSON.parse(sub.text_answer));
+                }
+              } catch {
+                // ignore
+              }
+              continue;
+            }
             loadedAnswers[sub.round_id] = {
               choice: sub.choice || undefined,
               text: sub.text_answer || undefined,
@@ -126,6 +150,26 @@ export const StudentHomeworkView: React.FC<StudentHomeworkViewProps> = ({
 
     loadData();
   }, [roomId, studentId, onLeave, t]);
+
+  // Final Lock Homework Submission
+  const handleLockHomework = async () => {
+    const ok = confirm(t('homework.lockSubmitConfirm'));
+    if (!ok) return;
+
+    setLocking(true);
+    try {
+      const res = await lockStudentHomework(roomId, studentId, studentName);
+      if (!res.success) throw new Error(res.error || '鎖定失敗');
+
+      setIsLocked(true);
+      setShowFinishedModal(false);
+      alert(t('homework.lockedSuccess'));
+    } catch (err: any) {
+      alert('鎖定作答失敗：' + err.message);
+    } finally {
+      setLocking(false);
+    }
+  };
 
   const currentQ = questions[currentIdx];
   const currentAnswer = currentQ ? answers[currentQ.id] : undefined;
@@ -350,6 +394,21 @@ export const StudentHomeworkView: React.FC<StudentHomeworkViewProps> = ({
       {/* Main Question Card */}
       {currentQ && (
         <div className="glass-panel rounded-3xl p-5 sm:p-7 shadow-soft border border-white/60 dark:border-slate-700 space-y-5">
+          {/* Locked Notice Banner */}
+          {isLocked && (
+            <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs font-bold flex items-start space-x-2.5">
+              <Lock className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <span>{t('homework.lockedBanner')}</span>
+                {lockMeta?.locked_at && (
+                  <span className="block text-[10px] text-amber-700/80 dark:text-amber-300/70 mt-0.5">
+                    鎖定時間：{new Date(lockMeta.locked_at).toLocaleString()}（{lockMeta.device}）
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Card Header */}
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -378,7 +437,7 @@ export const StudentHomeworkView: React.FC<StudentHomeworkViewProps> = ({
             {isCurrentSubmitted && (
               <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold flex-shrink-0">
                 <Check className="w-3 h-3" />
-                <span>已送出</span>
+                <span>{isLocked ? '已鎖定' : '已送出'}</span>
               </span>
             )}
           </div>
@@ -416,8 +475,9 @@ export const StudentHomeworkView: React.FC<StudentHomeworkViewProps> = ({
                     <button
                       key={opt}
                       type="button"
+                      disabled={isLocked}
                       onClick={() => handleSelectChoice(opt)}
-                      className={`py-4 rounded-2xl font-black text-lg transition flex items-center justify-center space-x-3 active:scale-95 ${
+                      className={`py-4 rounded-2xl font-black text-lg transition flex items-center justify-center space-x-3 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed ${
                         isSelected
                           ? 'btn-theme-primary shadow-glow-theme scale-[1.02]'
                           : 'bg-white/90 dark:bg-slate-800/90 border-2 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:border-indigo-400'
@@ -441,10 +501,11 @@ export const StudentHomeworkView: React.FC<StudentHomeworkViewProps> = ({
               </label>
               <textarea
                 rows={4}
+                disabled={isLocked}
                 value={currentAnswer?.text || ''}
                 onChange={(e) => handleTextChange(e.target.value)}
                 placeholder={t('student.submitTextPlaceholder')}
-                className="w-full p-4 rounded-2xl bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 focus:border-indigo-500 outline-none text-slate-800 dark:text-slate-100 font-medium text-sm transition"
+                className="w-full p-4 rounded-2xl bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 focus:border-indigo-500 outline-none text-slate-800 dark:text-slate-100 font-medium text-sm transition disabled:opacity-60 disabled:bg-slate-100 dark:disabled:bg-slate-900"
               />
             </div>
           )}
@@ -452,41 +513,43 @@ export const StudentHomeworkView: React.FC<StudentHomeworkViewProps> = ({
           {currentQ.type === 'image' && (
             <div className="space-y-3 pt-2">
               {/* Toggle Mode: Draw or Camera Upload */}
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                  作答方式：
-                </span>
-                <div className="flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 border border-slate-200/60 dark:border-slate-700">
-                  <button
-                    type="button"
-                    onClick={() => setImageInputMode('draw')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1 ${
-                      imageInputMode === 'draw'
-                        ? 'bg-white dark:bg-slate-700 text-theme shadow-xs'
-                        : 'text-slate-500'
-                    }`}
-                  >
-                    <PenTool className="w-3.5 h-3.5" />
-                    <span>觸控繪圖</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setImageInputMode('photo')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1 ${
-                      imageInputMode === 'photo'
-                        ? 'bg-white dark:bg-slate-700 text-theme shadow-xs'
-                        : 'text-slate-500'
-                    }`}
-                  >
-                    <Camera className="w-3.5 h-3.5" />
-                    <span>相機/照片上傳</span>
-                  </button>
+              {!isLocked && (
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                    作答方式：
+                  </span>
+                  <div className="flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 border border-slate-200/60 dark:border-slate-700">
+                    <button
+                      type="button"
+                      onClick={() => setImageInputMode('draw')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1 ${
+                        imageInputMode === 'draw'
+                          ? 'bg-white dark:bg-slate-700 text-theme shadow-xs'
+                          : 'text-slate-500'
+                      }`}
+                    >
+                      <PenTool className="w-3.5 h-3.5" />
+                      <span>觸控繪圖</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setImageInputMode('photo')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1 ${
+                        imageInputMode === 'photo'
+                          ? 'bg-white dark:bg-slate-700 text-theme shadow-xs'
+                          : 'text-slate-500'
+                      }`}
+                    >
+                      <Camera className="w-3.5 h-3.5" />
+                      <span>相機/照片上傳</span>
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {imageInputMode === 'draw' ? (
                 <div className="border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-xs">
-                  <StudentCanvas onSaveCanvas={handleCanvasSave} />
+                  <StudentCanvas disabled={isLocked} onSaveCanvas={handleCanvasSave} />
                 </div>
               ) : (
                 <div className="p-6 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border-2 border-dashed border-slate-300 dark:border-slate-700 text-center space-y-4">
@@ -498,7 +561,7 @@ export const StudentHomeworkView: React.FC<StudentHomeworkViewProps> = ({
                         className="max-h-56 mx-auto rounded-xl object-contain border"
                       />
                       <span className="text-xs font-bold text-emerald-600 block">
-                        ✓ 照片已就緒，點擊下方送出即可完成作答！
+                        ✓ 照片已就緒
                       </span>
                     </div>
                   ) : (
@@ -507,30 +570,32 @@ export const StudentHomeworkView: React.FC<StudentHomeworkViewProps> = ({
                     </p>
                   )}
 
-                  <div className="flex flex-wrap items-center justify-center gap-3">
-                    <label className="cursor-pointer px-4 py-2.5 rounded-xl btn-theme-primary text-xs font-bold shadow-xs active:scale-95 transition flex items-center space-x-2">
-                      <Camera className="w-4 h-4" />
-                      <span>相機拍照</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        capture="environment"
-                        className="hidden"
-                        onChange={handlePhotoUpload}
-                      />
-                    </label>
+                  {!isLocked && (
+                    <div className="flex flex-wrap items-center justify-center gap-3">
+                      <label className="cursor-pointer px-4 py-2.5 rounded-xl btn-theme-primary text-xs font-bold shadow-xs active:scale-95 transition flex items-center space-x-2">
+                        <Camera className="w-4 h-4" />
+                        <span>相機拍照</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          className="hidden"
+                          onChange={handlePhotoUpload}
+                        />
+                      </label>
 
-                    <label className="cursor-pointer px-4 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold hover:border-slate-300 active:scale-95 transition flex items-center space-x-2">
-                      <Upload className="w-4 h-4 text-theme" />
-                      <span>從相簿選擇</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={handlePhotoUpload}
-                      />
-                    </label>
-                  </div>
+                      <label className="cursor-pointer px-4 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold hover:border-slate-300 active:scale-95 transition flex items-center space-x-2">
+                        <Upload className="w-4 h-4 text-theme" />
+                        <span>從相簿選擇</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handlePhotoUpload}
+                        />
+                      </label>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -538,37 +603,46 @@ export const StudentHomeworkView: React.FC<StudentHomeworkViewProps> = ({
 
           {/* Submit Action for this question */}
           <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80">
-            <button
-              onClick={handleSubmitCurrent}
-              disabled={submitting || uploadingImg}
-              className={`w-full py-4 rounded-2xl font-black text-base shadow-md active:scale-[0.99] transition flex items-center justify-center space-x-2 ${
-                isCurrentSubmitted
-                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                  : 'btn-theme-primary'
-              }`}
-            >
-              {submitting || uploadingImg ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  <span>{t('homework.savingThisQuestion')}</span>
-                </>
-              ) : isCurrentSubmitted ? (
-                <>
-                  <CheckCircle2 className="w-5 h-5" />
-                  <span>更新送出此題作答 (覆蓋舊答案)</span>
-                </>
-              ) : (
-                <>
-                  <Send className="w-5 h-5" />
-                  <span>{t('homework.saveThisQuestion')}</span>
-                </>
-              )}
-            </button>
+            {isLocked ? (
+              <div className="w-full py-3.5 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-bold text-xs sm:text-sm flex items-center justify-center space-x-2 border border-slate-200 dark:border-slate-700 select-none">
+                <Lock className="w-4 h-4 text-amber-600" />
+                <span>作業已確認鎖定 (唯讀狀態，防止竄改)</span>
+              </div>
+            ) : (
+              <>
+                <button
+                  onClick={handleSubmitCurrent}
+                  disabled={submitting || uploadingImg}
+                  className={`w-full py-4 rounded-2xl font-black text-base shadow-md active:scale-[0.99] transition flex items-center justify-center space-x-2 ${
+                    isCurrentSubmitted
+                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                      : 'btn-theme-primary'
+                  }`}
+                >
+                  {submitting || uploadingImg ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <span>{t('homework.savingThisQuestion')}</span>
+                    </>
+                  ) : isCurrentSubmitted ? (
+                    <>
+                      <CheckCircle2 className="w-5 h-5" />
+                      <span>更新送出此題作答 (覆蓋舊答案)</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-5 h-5" />
+                      <span>{t('homework.saveThisQuestion')}</span>
+                    </>
+                  )}
+                </button>
 
-            {isCurrentSubmitted && (
-              <p className="text-center text-[11px] text-slate-400 mt-2">
-                {t('homework.studentSubmittedBadge')}
-              </p>
+                {isCurrentSubmitted && (
+                  <p className="text-center text-[11px] text-slate-400 mt-2">
+                    {t('homework.studentSubmittedBadge')}
+                  </p>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -654,6 +728,33 @@ export const StudentHomeworkView: React.FC<StudentHomeworkViewProps> = ({
                 );
               })}
             </div>
+
+            {/* If all completed and not locked yet, provide the Lock Submission button */}
+            {!isLocked && completedCount === questions.length ? (
+              <div className="pt-2 space-y-2">
+                <button
+                  type="button"
+                  onClick={handleLockHomework}
+                  disabled={locking}
+                  className="w-full py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white font-bold text-sm shadow-md transition flex items-center justify-center space-x-2 disabled:opacity-50"
+                >
+                  {locking ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Lock className="w-4 h-4" />
+                  )}
+                  <span>{t('homework.lockSubmitBtn')}</span>
+                </button>
+                <p className="text-[11px] text-slate-400">
+                  送出鎖定後答案將不可再修改，可徹底防止被他人冒用覆蓋。
+                </p>
+              </div>
+            ) : isLocked ? (
+              <div className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-xs font-bold flex items-center justify-center space-x-2">
+                <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                <span>作業已確認送出並鎖定保護中</span>
+              </div>
+            ) : null}
 
             <div className="flex items-center space-x-3 pt-2">
               <button

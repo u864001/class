@@ -192,7 +192,7 @@ export async function fetchRoster(): Promise<{
   return { rosterByClass, allStudents };
 }
 
-export function formatClassLabel(classKey: string): string {
+export function formatClassLabel(classKey: string, withCampus: boolean = false): string {
   const [grade, cls] = classKey.split('-');
   const gradeMap: Record<string, string> = {
     '1': '一年',
@@ -208,7 +208,9 @@ export function formatClassLabel(classKey: string): string {
     '3': '丙班',
     '4': '丁班',
   };
-  return `${gradeMap[grade] || grade + '年'}${classMap[cls] || cls + '班'}`;
+  const campus = cls === '1' ? '霧臺' : cls === '2' ? '勵古' : '';
+  const base = `${gradeMap[grade] || grade + '年'}${classMap[cls] || cls + '班'}`;
+  return withCampus && campus ? `${campus} ${base}` : base;
 }
 
 

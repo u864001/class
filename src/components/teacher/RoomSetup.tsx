@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { School, CheckSquare, Square, Loader2, Sparkles, BookOpen, Radio } from 'lucide-react';
 import { fetchRoster, formatClassLabel } from '../../lib/rosterApi';
-import { FIXED_ROOM_PRESETS } from '../../lib/homeworkApi';
+import { FIXED_ROOM_PRESETS, WUTAI_PRESETS, LIGU_PRESETS } from '../../lib/homeworkApi';
 import { supabase } from '../../lib/supabase';
 import { useI18n } from '../../context/I18nContext';
 
@@ -21,6 +21,7 @@ export const RoomSetup: React.FC<RoomSetupProps> = ({ onRoomCreated }) => {
   const [loadingRoster, setLoadingRoster] = useState(true);
 
   // Homework Fixed Room settings
+  const [campusTab, setCampusTab] = useState<'wutai' | 'ligu' | 'custom'>('wutai');
   const [fixedRoomCode, setFixedRoomCode] = useState('WT0601');
   const [selectedPreset, setSelectedPreset] = useState<string>('WT0601');
 
@@ -228,47 +229,156 @@ export const RoomSetup: React.FC<RoomSetupProps> = ({ onRoomCreated }) => {
           {sessionMode === 'homework' ? (
             /* Homework Fixed Code Settings */
             <div className="p-4 rounded-2xl bg-slate-50/80 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700 space-y-4">
+              {/* Campus Selector Sub-Tabs */}
               <div>
-                <span className="font-semibold text-slate-700 dark:text-slate-200 text-sm block mb-1">
-                  {t('homework.presetsLabel')}
+                <span className="font-semibold text-slate-700 dark:text-slate-200 text-xs block mb-2">
+                  選擇校區與班級 (或科任自訂)：
                 </span>
-                <div className="grid grid-cols-2 gap-2 pt-1">
-                  {FIXED_ROOM_PRESETS.map((p) => {
+                <div className="flex rounded-xl bg-slate-200/70 dark:bg-slate-700/60 p-1 text-xs font-bold">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCampusTab('wutai');
+                      handleSelectPreset(WUTAI_PRESETS[5]); // default 六甲
+                    }}
+                    className={`flex-1 py-1.5 rounded-lg transition ${
+                      campusTab === 'wutai'
+                        ? 'bg-white dark:bg-slate-800 text-theme shadow-xs'
+                        : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                    }`}
+                  >
+                    霧臺校區 (甲班)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCampusTab('ligu');
+                      handleSelectPreset(LIGU_PRESETS[4]); // default 五乙
+                    }}
+                    className={`flex-1 py-1.5 rounded-lg transition ${
+                      campusTab === 'ligu'
+                        ? 'bg-white dark:bg-slate-800 text-theme shadow-xs'
+                        : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                    }`}
+                  >
+                    勵古校區 (乙班)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCampusTab('custom');
+                      setSelectedPreset('');
+                    }}
+                    className={`flex-1 py-1.5 rounded-lg transition ${
+                      campusTab === 'custom'
+                        ? 'bg-white dark:bg-slate-800 text-theme shadow-xs'
+                        : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                    }`}
+                  >
+                    科任自訂開班
+                  </button>
+                </div>
+              </div>
+
+              {campusTab === 'wutai' && (
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 pt-1">
+                  {WUTAI_PRESETS.map((p) => {
                     const isSelected = selectedPreset === p.code;
                     return (
                       <button
                         key={p.code}
                         type="button"
                         onClick={() => handleSelectPreset(p)}
-                        className={`p-3 rounded-xl border text-left transition ${
+                        className={`p-2.5 rounded-xl border text-center transition ${
                           isSelected
-                            ? 'badge-theme border-current shadow-xs font-bold'
+                            ? 'badge-theme border-current shadow-xs font-bold scale-105'
                             : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-300'
                         }`}
                       >
-                        <span className="block font-mono text-sm tracking-wider">{p.code}</span>
-                        <span className="text-[11px] opacity-75">{p.label.split('(')[0]}</span>
+                        <span className="block text-xs font-black text-slate-800 dark:text-slate-100">{p.shortLabel}</span>
+                        <span className="text-[10px] font-mono text-slate-400 block mt-0.5">{p.code}</span>
                       </button>
                     );
                   })}
                 </div>
-              </div>
+              )}
 
-              <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
-                  {t('homework.fixedCodeLabel')} (也可自行手動輸入)：
-                </label>
-                <input
-                  type="text"
-                  value={fixedRoomCode}
-                  onChange={(e) => {
-                    setFixedRoomCode(e.target.value.toUpperCase());
-                    setSelectedPreset('');
-                  }}
-                  placeholder={t('homework.fixedCodePlaceholder')}
-                  className="w-full px-4 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 font-mono font-bold tracking-widest outline-none text-center"
-                />
-              </div>
+              {campusTab === 'ligu' && (
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 pt-1">
+                  {LIGU_PRESETS.map((p) => {
+                    const isSelected = selectedPreset === p.code;
+                    return (
+                      <button
+                        key={p.code}
+                        type="button"
+                        onClick={() => handleSelectPreset(p)}
+                        className={`p-2.5 rounded-xl border text-center transition ${
+                          isSelected
+                            ? 'badge-theme border-current shadow-xs font-bold scale-105'
+                            : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-300'
+                        }`}
+                      >
+                        <span className="block text-xs font-black text-slate-800 dark:text-slate-100">{p.shortLabel}</span>
+                        <span className="text-[10px] font-mono text-slate-400 block mt-0.5">{p.code}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {campusTab === 'custom' && (
+                <div className="space-y-3 pt-1">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
+                      科任自訂教室代碼 (例如 NAT01, ENG02)：
+                    </label>
+                    <input
+                      type="text"
+                      value={fixedRoomCode}
+                      onChange={(e) => {
+                        setFixedRoomCode(e.target.value.toUpperCase());
+                        setSelectedPreset('');
+                      }}
+                      placeholder="例如：NAT01"
+                      className="w-full px-4 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 font-mono font-bold tracking-widest outline-none text-center"
+                    />
+                  </div>
+
+                  <div>
+                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400 block mb-1">
+                      指派作答班級名單：
+                    </span>
+                    <div className="grid grid-cols-2 gap-2 max-h-36 overflow-y-auto">
+                      {rosterClasses.map((clsKey) => {
+                        const isSelected = selectedClasses.includes(clsKey);
+                        return (
+                          <button
+                            key={clsKey}
+                            type="button"
+                            onClick={() => toggleClass(clsKey)}
+                            className={`flex items-center space-x-2 px-3 py-2 rounded-xl border text-xs font-medium transition text-left ${
+                              isSelected
+                                ? 'badge-theme border-current font-bold'
+                                : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
+                            }`}
+                          >
+                            <span>{formatClassLabel(clsKey, true)}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {campusTab !== 'custom' && (
+                <div className="pt-2 text-xs flex items-center justify-between border-t border-slate-200/60 dark:border-slate-700">
+                  <span className="text-slate-400">目前選定班級代碼：</span>
+                  <span className="font-mono font-bold text-theme bg-white dark:bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700">
+                    {fixedRoomCode}
+                  </span>
+                </div>
+              )}
             </div>
           ) : (
             /* Live Class Configuration */
