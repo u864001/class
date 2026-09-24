@@ -229,20 +229,38 @@ export const HomeworkReview: React.FC<HomeworkReviewProps> = ({
     }
   };
 
+  const [backupInitiated, setBackupInitiated] = useState(false);
+  const [confirmCheckbox, setConfirmCheckbox] = useState(false);
+
+  // Invalidate backup whenever room, assignment or submissions count changes
+  useEffect(() => {
+    setBackupInitiated(false);
+    setConfirmCheckbox(false);
+  }, [room.id, hwData?.assignment_id, submissions.length]);
+
   // Export Results
-  const handleExport = async () => {
+  const handleExport = async (): Promise<boolean> => {
     setExporting(true);
     try {
-      await exportRoomResults(room, submissions);
+      const res = await exportRoomResults(room, submissions);
+      if (!res.isComplete) {
+        alert(
+          `⚠️ 備份已下載，但有 ${res.failedImages} 張圖片下載失敗，備份不完整！請確認網路連線穩定後重新下載備份。`
+        );
+        setBackupInitiated(false);
+        setConfirmCheckbox(false);
+        return false;
+      }
+      setBackupInitiated(true);
+      return true;
     } catch (err: any) {
       alert('匯出失敗：' + err.message);
+      setBackupInitiated(false);
+      return false;
     } finally {
       setExporting(false);
     }
   };
-
-  const [backupDownloaded, setBackupDownloaded] = useState(false);
-  const [confirmCheckbox, setConfirmCheckbox] = useState(false);
 
   // Red Safety Zone: Two-Stage Execution
   const handleExecuteSafetyClear = async () => {
@@ -908,19 +926,16 @@ export const HomeworkReview: React.FC<HomeworkReviewProps> = ({
                 </span>
                 <span>第一步：產生並下載完整成果包 (Excel + 圖檔 ZIP)</span>
               </span>
-              {backupDownloaded && (
+              {backupInitiated && (
                 <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center space-x-1">
                   <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>已完成備份下載</span>
+                  <span>已啟動下載，請至下載資料夾確認檔案</span>
                 </span>
               )}
             </div>
 
             <button
-              onClick={async () => {
-                await handleExport();
-                setBackupDownloaded(true);
-              }}
+              onClick={() => handleExport()}
               disabled={exporting}
               className="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white font-bold text-xs shadow-xs active:scale-[0.99] transition flex items-center justify-center space-x-2 disabled:opacity-50"
             >
@@ -932,7 +947,7 @@ export const HomeworkReview: React.FC<HomeworkReviewProps> = ({
               ) : (
                 <>
                   <Download className="w-4 h-4" />
-                  <span>{backupDownloaded ? '再次下載成果備份包' : '下載成果備份包 (Excel + 圖片 ZIP)'}</span>
+                  <span>{backupInitiated ? '再次下載成果備份包' : '下載成果備份包 (Excel + 圖片 ZIP)'}</span>
                 </>
               )}
             </button>
@@ -949,7 +964,7 @@ export const HomeworkReview: React.FC<HomeworkReviewProps> = ({
               </span>
             </div>
 
-            {!backupDownloaded ? (
+            {!backupInitiated ? (
               <p className="text-[11px] text-slate-400 italic">
                 🔒 請先完成「第一步：下載成果備份包」，系統才會解鎖清空按鈕，防止誤刪。
               </p>

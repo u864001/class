@@ -163,6 +163,24 @@ export const StudentHomeworkView: React.FC<StudentHomeworkViewProps> = ({
       return;
     }
 
+    // Auto-flush current question if edited but not yet submitted
+    const currentAns = currentQ ? answers[currentQ.id] : undefined;
+    const hasUnsubmittedInput =
+      currentAns &&
+      !currentAns.submittedAt &&
+      (currentAns.choice ||
+        (currentAns.text && currentAns.text.trim()) ||
+        currentAns.imageUrl ||
+        currentAns.canvasEl);
+
+    if (hasUnsubmittedInput) {
+      const shouldSave = confirm(
+        '目前題目有尚未儲存的作答內容，系統將先為您儲存此題，再鎖定答案。是否繼續？'
+      );
+      if (!shouldSave) return;
+      await handleSubmitCurrent();
+    }
+
     const ok = confirm(t('homework.lockSubmitConfirm'));
     if (!ok) return;
 
@@ -280,9 +298,10 @@ export const StudentHomeworkView: React.FC<StudentHomeworkViewProps> = ({
 
     setSubmitting(true);
     try {
-      // 1. Double-check if student has already been locked in DB
+      // 1. Double-check if student has already been locked in DB for this assignment
       const cleanRoomId = roomId.trim().toUpperCase();
-      const lockRoundIds = [`${assignmentId}_LOCK`, LOCK_ROUND_ID];
+      const lockRoundIds =
+        assignmentId !== 'ASG_DEFAULT' ? [`${assignmentId}_LOCK`] : [LOCK_ROUND_ID];
       const { data: lockCheck } = await supabase
         .from('submissions')
         .select('id')

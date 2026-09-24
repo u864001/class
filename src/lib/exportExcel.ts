@@ -4,10 +4,18 @@ import { Submission, Room } from '../types';
 import { supabase } from './supabase';
 import { parseHomework } from './homeworkApi';
 
+export interface ExportResult {
+  success: boolean;
+  isZip: boolean;
+  totalImages: number;
+  failedImages: number;
+  isComplete: boolean;
+}
+
 export async function exportRoomResults(
   room: Room,
   fallbackSubmissions: Submission[] = []
-): Promise<{ success: boolean; isZip: boolean }> {
+): Promise<ExportResult> {
   // 1. Fetch all historical submissions across all rounds for this room
   let allSubmissions = fallbackSubmissions;
   try {
@@ -91,7 +99,13 @@ export async function exportRoomResults(
     a.download = `${baseTitle}_${new Date().toISOString().slice(0, 10)}.xlsx`;
     a.click();
     URL.revokeObjectURL(url);
-    return { success: true, isZip: false };
+    return {
+      success: true,
+      isZip: false,
+      totalImages: 0,
+      failedImages: 0,
+      isComplete: true,
+    };
   }
 
   // Bundle into ZIP
@@ -100,15 +114,24 @@ export async function exportRoomResults(
   zip.file(`成績與作答明細.xlsx`, excelBlob);
 
   const imgFolder = zip.folder('學生繪圖作品');
+  let failedImageCount = 0;
+
   for (const s of imagesToDownload) {
     try {
       if (!s.image_url) continue;
-      const res = await fetch(s.image_url);
+      // Fetch with cache busting and no-cache header to always retrieve the latest image
+      const fetchUrl = s.image_url.includes('?')
+        ? `${s.image_url}&_t=${Date.now()}`
+        : `${s.image_url}?_t=${Date.now()}`;
+      const res = await fetch(fetchUrl, { cache: 'no-cache' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const blob = await res.blob();
-      const ext = s.image_url.endsWith('.webp') ? 'webp' : 'jpg';
+      const ext =
+        blob.type === 'image/webp' || s.image_url.includes('.webp') ? 'webp' : 'jpg';
       const cleanRound = (s.round_id || 'R1').replace(/[^a-zA-Z0-9_-]/g, '');
       imgFolder?.file(`${cleanRound}_${s.student_id}_${s.student_name}.${ext}`, blob);
     } catch (e) {
+      failedImageCount++;
       console.warn('Failed to fetch image for zip:', s.image_url, e);
     }
   }
@@ -120,5 +143,12 @@ export async function exportRoomResults(
   a.download = `${baseTitle}_${new Date().toISOString().slice(0, 10)}.zip`;
   a.click();
   URL.revokeObjectURL(zipUrl);
-  return { success: true, isZip: true };
+
+  return {
+    success: true,
+    isZip: true,
+    totalImages: imagesToDownload.length,
+    failedImages: failedImageCount,
+    isComplete: failedImageCount === 0,
+  };
 }
