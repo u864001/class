@@ -48,22 +48,24 @@ export async function exportRoomResults(
   const hwData = parseHomework(room.question_note);
   const qMap = new Map(hwData?.questions?.map((q) => [q.id, q]));
 
-  // 3. Prepare Sheet 2: Submissions Details
-  const submissionData = allSubmissions.map((sub, idx) => {
-    const qInfo = qMap.get(sub.round_id);
-    return {
-      編號_No: idx + 1,
-      題目編號_Question: qInfo ? `第 ${qInfo.num} 題 (${qInfo.type})` : sub.round_id,
-      題目說明_Prompt: qInfo ? qInfo.note : '',
-      學生座號_ID: sub.student_id,
-      學生姓名_Name: sub.student_name,
-      選擇題作答_Choice: sub.choice || '',
-      問答文字_Text: sub.text_answer || '',
-      作品圖片網址_ImageUrl: sub.image_url || '',
-      本題得分_EarnedScore: sub.earned_score || 0,
-      繳交時間_Time: new Date(sub.created_at).toLocaleString(),
-    };
-  });
+  // 3. Prepare Sheet 2: Submissions Details (exclude lock control records)
+  const submissionData = allSubmissions
+    .filter((sub) => sub.round_id !== 'HW_FINAL_LOCK' && !sub.round_id.endsWith('_LOCK'))
+    .map((sub, idx) => {
+      const qInfo = qMap.get(sub.round_id);
+      return {
+        編號_No: idx + 1,
+        題目編號_Question: qInfo ? `第 ${qInfo.num} 題 (${qInfo.type})` : sub.round_id,
+        題目說明_Prompt: qInfo ? qInfo.note : '',
+        學生座號_ID: sub.student_id,
+        學生姓名_Name: sub.student_name,
+        選擇題作答_Choice: sub.choice || '',
+        問答文字_Text: sub.text_answer || '',
+        作品圖片網址_ImageUrl: sub.image_url || '',
+        本題得分_EarnedScore: sub.earned_score || 0,
+        繳交時間_Time: new Date(sub.created_at).toLocaleString(),
+      };
+    });
 
   const wb = XLSX.utils.book_new();
   const wsLeaderboard = XLSX.utils.json_to_sheet(leaderboardData);

@@ -23,9 +23,11 @@ export interface HomeworkQuestion {
 
 export interface HomeworkData {
   is_homework: boolean;
+  assignment_id?: string;
   title: string;
   questions: HomeworkQuestion[];
   created_at?: string;
+  closed_at?: string;
 }
 
 export interface Room {
@@ -56,6 +58,7 @@ export interface Room {
   groups: string[];
   group_scores: Record<string, number>;
   room_mode?: RoomMode;
+  assignment_id?: string;
   homework_title?: string;
   homework_questions?: HomeworkQuestion[];
   created_at: string;

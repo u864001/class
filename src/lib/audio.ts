@@ -28,6 +28,26 @@ function getSharedAudioContext(): AudioContext | null {
   }
 }
 
+export function resumeAudioContext(): void {
+  try {
+    const ctx = getSharedAudioContext();
+    if (ctx && ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+  } catch {}
+}
+
+// Auto-unlock AudioContext on first user interaction to comply with autoplay policy
+if (typeof window !== 'undefined') {
+  const unlockAudio = () => {
+    resumeAudioContext();
+    window.removeEventListener('click', unlockAudio);
+    window.removeEventListener('touchstart', unlockAudio);
+  };
+  window.addEventListener('click', unlockAudio, { passive: true });
+  window.addEventListener('touchstart', unlockAudio, { passive: true });
+}
+
 export type SoundEffectType =
   | 'dice'
   | 'tick'

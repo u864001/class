@@ -26,9 +26,9 @@ import {
   lockStudentHomework,
   LOCK_ROUND_ID,
   LockMetadata,
+  uploadStudentHomeworkImage,
 } from '../../../lib/homeworkApi';
 import { supabase } from '../../../lib/supabase';
-import { compressAndUploadCanvas, uploadSlideFromFile } from '../../../lib/imageCompressor';
 import { StudentCanvas } from '../StudentCanvas';
 import { useI18n } from '../../../context/I18nContext';
 
@@ -51,6 +51,7 @@ export const StudentHomeworkView: React.FC<StudentHomeworkViewProps> = ({
   const [room, setRoom] = useState<Room | null>(null);
   const [questions, setQuestions] = useState<HomeworkQuestion[]>([]);
   const [hwTitle, setHwTitle] = useState('課堂回家作業');
+  const [assignmentId, setAssignmentId] = useState<string>('ASG_DEFAULT');
 
   const [currentIdx, setCurrentIdx] = useState(0);
 
@@ -108,6 +109,8 @@ export const StudentHomeworkView: React.FC<StudentHomeworkViewProps> = ({
           return;
         }
 
+        const asgId = parsed.assignment_id || 'ASG_DEFAULT';
+        setAssignmentId(asgId);
         setQuestions(parsed.questions);
         setHwTitle(parsed.title || '課堂回家作業');
 
@@ -120,8 +123,10 @@ export const StudentHomeworkView: React.FC<StudentHomeworkViewProps> = ({
 
         if (subsData && subsData.length > 0) {
           const loadedAnswers: typeof answers = {};
+          const lockRoundId = `${asgId}_LOCK`;
+
           for (const sub of subsData as Submission[]) {
-            if (sub.round_id === LOCK_ROUND_ID) {
+            if (sub.round_id === lockRoundId || sub.round_id === LOCK_ROUND_ID) {
               setIsLocked(true);
               try {
                 if (sub.text_answer) {
@@ -153,12 +158,17 @@ export const StudentHomeworkView: React.FC<StudentHomeworkViewProps> = ({
 
   // Final Lock Homework Submission
   const handleLockHomework = async () => {
+    if (uploadingImg || submitting) {
+      alert('尚有圖片或作答正在儲存中，請稍候幾秒後再確認送出！');
+      return;
+    }
+
     const ok = confirm(t('homework.lockSubmitConfirm'));
     if (!ok) return;
 
     setLocking(true);
     try {
-      const res = await lockStudentHomework(roomId, studentId, studentName);
+      const res = await lockStudentHomework(roomId, studentId, studentName, assignmentId);
       if (!res.success) throw new Error(res.error || '鎖定失敗');
 
       setIsLocked(true);
@@ -216,13 +226,19 @@ export const StudentHomeworkView: React.FC<StudentHomeworkViewProps> = ({
     }));
   };
 
-  // Handle Photo / File Upload
+  // Handle Photo / File Upload (Client-side automatic compression to WebP 1440px)
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !currentQ) return;
     setUploadingImg(true);
     try {
-      const url = await uploadSlideFromFile(roomId, currentQ.num, file);
+      const url = await uploadStudentHomeworkImage(
+        roomId,
+        assignmentId,
+        currentQ.id,
+        studentId,
+        file
+      );
       setAnswers((prev) => ({
         ...prev,
         [currentQ.id]: {
@@ -241,6 +257,11 @@ export const StudentHomeworkView: React.FC<StudentHomeworkViewProps> = ({
   // Submit Current Question
   const handleSubmitCurrent = async () => {
     if (!currentQ) return;
+    if (isLocked) {
+      alert('您的作答已鎖定，若需修改請洽任課老師解除鎖定！');
+      return;
+    }
+
     const ans = answers[currentQ.id];
 
     // Validation
@@ -259,14 +280,33 @@ export const StudentHomeworkView: React.FC<StudentHomeworkViewProps> = ({
 
     setSubmitting(true);
     try {
+      // 1. Double-check if student has already been locked in DB
+      const cleanRoomId = roomId.trim().toUpperCase();
+      const lockRoundIds = [`${assignmentId}_LOCK`, LOCK_ROUND_ID];
+      const { data: lockCheck } = await supabase
+        .from('submissions')
+        .select('id')
+        .eq('room_id', cleanRoomId)
+        .in('round_id', lockRoundIds)
+        .eq('student_id', studentId)
+        .maybeSingle();
+
+      if (lockCheck) {
+        setIsLocked(true);
+        alert('您的作答已鎖定，若需修改請洽任課老師解除鎖定！');
+        return;
+      }
+
       let finalImageUrl = ans?.imageUrl || null;
 
       // If user drew on canvas, compress and upload WebP
       if (currentQ.type === 'image' && ans?.canvasEl && !ans?.imageUrl) {
-        finalImageUrl = await compressAndUploadCanvas(
-          ans.canvasEl,
+        finalImageUrl = await uploadStudentHomeworkImage(
           roomId,
-          `hw_${currentQ.id}_${studentId}`
+          assignmentId,
+          currentQ.id,
+          studentId,
+          ans.canvasEl
         );
       }
 
@@ -279,7 +319,7 @@ export const StudentHomeworkView: React.FC<StudentHomeworkViewProps> = ({
       // Upsert into Supabase submissions table
       const { error } = await supabase.from('submissions').upsert(
         {
-          room_id: roomId.trim().toUpperCase(),
+          room_id: cleanRoomId,
           round_id: currentQ.id,
           student_id: studentId,
           student_name: studentName,

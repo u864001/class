@@ -153,13 +153,29 @@ export const HomeworkBuilder: React.FC<HomeworkBuilderProps> = ({
 
     setPublishing(true);
     try {
-      const serialized = serializeHomework(title, questions);
+      const assignmentId =
+        existingHw?.assignment_id ||
+        `ASG_${Date.now()}_${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+
+      // Ensure each question ID is reliably scoped to this assignment
+      const normalizedQuestions = questions.map((q, idx) => {
+        const qId = q.id.startsWith(assignmentId)
+          ? q.id
+          : `${assignmentId}_Q${idx + 1}`;
+        return {
+          ...q,
+          id: qId,
+          num: idx + 1,
+        };
+      });
+
+      const serialized = serializeHomework(title, normalizedQuestions, assignmentId);
       const { error } = await supabase
         .from('rooms')
         .update({
           status: 'homework_active',
           question_note: serialized,
-          current_question_num: questions.length,
+          current_question_num: normalizedQuestions.length,
           answering_started_at: new Date().toISOString(),
         })
         .eq('id', room.id.toUpperCase());

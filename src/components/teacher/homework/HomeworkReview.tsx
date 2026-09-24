@@ -113,11 +113,11 @@ export const HomeworkReview: React.FC<HomeworkReviewProps> = ({
     loadSubmissions();
   }, [room, loadSubmissions]);
 
-  // Group lock metadata by studentId
+  // Group lock metadata by studentId (supports both HW_FINAL_LOCK and assignment-scoped _LOCK)
   const lockedStudentsMap = useMemo(() => {
     const map = new Map<string, LockMetadata>();
     for (const sub of submissions) {
-      if (sub.round_id === LOCK_ROUND_ID && sub.text_answer) {
+      if ((sub.round_id === LOCK_ROUND_ID || sub.round_id.endsWith('_LOCK')) && sub.text_answer) {
         try {
           map.set(sub.student_id, JSON.parse(sub.text_answer));
         } catch {
@@ -141,11 +141,17 @@ export const HomeworkReview: React.FC<HomeworkReviewProps> = ({
 
     setUnlockingStudentId(studentId);
     try {
-      const res = await unlockStudentHomework(room.id, studentId);
+      const res = await unlockStudentHomework(room.id, studentId, hwData?.assignment_id);
       if (!res.success) throw new Error(res.error || '解鎖失敗');
 
       setSubmissions((prev) =>
-        prev.filter((s) => !(s.student_id === studentId && s.round_id === LOCK_ROUND_ID))
+        prev.filter(
+          (s) =>
+            !(
+              s.student_id === studentId &&
+              (s.round_id === LOCK_ROUND_ID || s.round_id.endsWith('_LOCK'))
+            )
+        )
       );
       alert(t('homework.teacherUnlockSuccess', { name: studentName }));
     } catch (err: any) {
@@ -155,11 +161,11 @@ export const HomeworkReview: React.FC<HomeworkReviewProps> = ({
     }
   };
 
-  // Group submissions by studentId (excluding LOCK_ROUND_ID)
+  // Group submissions by studentId (excluding LOCK records)
   const studentSubmissionsMap = useMemo(() => {
     const map = new Map<string, Map<string, Submission>>();
     for (const sub of submissions) {
-      if (sub.round_id === LOCK_ROUND_ID) continue;
+      if (sub.round_id === LOCK_ROUND_ID || sub.round_id.endsWith('_LOCK')) continue;
       if (!map.has(sub.student_id)) {
         map.set(sub.student_id, new Map());
       }
@@ -235,23 +241,27 @@ export const HomeworkReview: React.FC<HomeworkReviewProps> = ({
     }
   };
 
-  // Red Safety Download & Clear
-  const handleSafetyDownloadAndClear = async () => {
-    const ok = confirm(t('homework.safetyClearConfirm'));
-    if (!ok) return;
+  const [backupDownloaded, setBackupDownloaded] = useState(false);
+  const [confirmCheckbox, setConfirmCheckbox] = useState(false);
+
+  // Red Safety Zone: Two-Stage Execution
+  const handleExecuteSafetyClear = async () => {
+    if (!confirmCheckbox) {
+      alert('請先勾選已確認電腦已存妥備份檔案！');
+      return;
+    }
 
     setClearing(true);
     try {
-      // 1. Download export package first
-      await exportRoomResults(room, submissions);
-
-      // 2. Clean cloud storage assets & DB submissions
-      const { success, error } = await cleanRoomAllAssetsAndSubmissions(room.id);
+      const { success, error } = await cleanRoomAllAssetsAndSubmissions(
+        room.id,
+        hwData?.assignment_id
+      );
       if (!success) {
         throw new Error(error || '清理雲端資源失敗');
       }
 
-      alert(t('homework.clearedSuccess'));
+      alert('雲端空間已徹底釋放清空！房間已重置為備課狀態。');
       onRefreshRoom?.();
       onReopenBuilder();
     } catch (err: any) {
@@ -874,38 +884,109 @@ export const HomeworkReview: React.FC<HomeworkReviewProps> = ({
         </div>
       )}
 
-      {/* Red Safety Zone: Download Package and Clear Storage */}
+      {/* Red Safety Zone: Two-Stage Safe Download & Clear Storage */}
       <div className="pt-6">
-        <div className="p-6 rounded-3xl bg-rose-50/80 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 space-y-4">
+        <div className="p-6 rounded-3xl bg-rose-50/80 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 space-y-5">
           <div className="flex items-start space-x-3">
             <AlertTriangle className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" />
             <div>
               <h4 className="text-sm font-bold text-rose-800 dark:text-rose-200">
-                危險操作區・儲存空間清空與歸零
+                危險操作區・儲存空間清空與歸零（兩階段安全防護）
               </h4>
-              <p className="text-xs text-rose-600/90 dark:text-rose-300/80 mt-0.5">
-                為嚴格守護 Supabase 免費 1GB 額度，請於本輪作業結束後執行清空。系統將先為您打包匯出全部成果 Excel 與圖檔 ZIP，隨後徹底刪除雲端圖檔，將 Storage 歸零重置！
+              <p className="text-xs text-rose-600/90 dark:text-rose-300/80 mt-1">
+                為嚴格守護 Supabase 免費 1GB 額度並確保作品不遺失，清空採兩階段保護：必須先下載並確認成果備份（Excel + 圖檔 ZIP）存入您的電腦，才能解鎖清空權限。
               </p>
             </div>
           </div>
 
-          <button
-            onClick={handleSafetyDownloadAndClear}
-            disabled={clearing}
-            className="w-full py-4 rounded-2xl bg-rose-600 hover:bg-rose-700 active:scale-[0.99] text-white font-bold text-sm shadow-md transition flex items-center justify-center space-x-2 disabled:opacity-50"
-          >
-            {clearing ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                <span>{t('homework.clearingProgress')}</span>
-              </>
+          {/* Stage 1: Download backup */}
+          <div className="p-4 rounded-2xl bg-white/80 dark:bg-slate-900/60 border border-rose-200/80 dark:border-rose-900/40 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center space-x-1.5">
+                <span className="w-5 h-5 rounded-full bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-200 text-[11px] font-black inline-flex items-center justify-center">
+                  1
+                </span>
+                <span>第一步：產生並下載完整成果包 (Excel + 圖檔 ZIP)</span>
+              </span>
+              {backupDownloaded && (
+                <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center space-x-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>已完成備份下載</span>
+                </span>
+              )}
+            </div>
+
+            <button
+              onClick={async () => {
+                await handleExport();
+                setBackupDownloaded(true);
+              }}
+              disabled={exporting}
+              className="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white font-bold text-xs shadow-xs active:scale-[0.99] transition flex items-center justify-center space-x-2 disabled:opacity-50"
+            >
+              {exporting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>正在打包 Excel 與學生圖片...</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-4 h-4" />
+                  <span>{backupDownloaded ? '再次下載成果備份包' : '下載成果備份包 (Excel + 圖片 ZIP)'}</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Stage 2: Confirm backup & Purge */}
+          <div className="p-4 rounded-2xl bg-white/80 dark:bg-slate-900/60 border border-rose-200/80 dark:border-rose-900/40 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center space-x-1.5">
+                <span className="w-5 h-5 rounded-full bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-200 text-[11px] font-black inline-flex items-center justify-center">
+                  2
+                </span>
+                <span>第二步：確認備份存妥，釋放雲端空間並重置房間</span>
+              </span>
+            </div>
+
+            {!backupDownloaded ? (
+              <p className="text-[11px] text-slate-400 italic">
+                🔒 請先完成「第一步：下載成果備份包」，系統才會解鎖清空按鈕，防止誤刪。
+              </p>
             ) : (
-              <>
-                <Trash2 className="w-5 h-5" />
-                <span>{t('homework.safetyDownloadAndClear')}</span>
-              </>
+              <div className="space-y-3 pt-1">
+                <label className="flex items-start space-x-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={confirmCheckbox}
+                    onChange={(e) => setConfirmCheckbox(e.target.checked)}
+                    className="w-4 h-4 mt-0.5 rounded text-rose-600 focus:ring-rose-500 border-slate-300"
+                  />
+                  <span className="text-xs text-rose-700 dark:text-rose-300 font-medium leading-relaxed">
+                    我已檢查電腦「下載」資料夾，確認 Excel 與 ZIP 檔案均已成功存妥，同意徹底刪除此作業在雲端的圖檔與學生作答紀錄。
+                  </span>
+                </label>
+
+                <button
+                  onClick={handleExecuteSafetyClear}
+                  disabled={!confirmCheckbox || clearing}
+                  className="w-full py-3.5 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-[0.99] text-white font-bold text-xs shadow-md transition flex items-center justify-center space-x-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {clearing ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>正在清理雲端空間與重置房間...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4" />
+                      <span>確認清空雲端空間・重置房間為備課模式</span>
+                    </>
+                  )}
+                </button>
+              </div>
             )}
-          </button>
+          </div>
         </div>
       </div>
 

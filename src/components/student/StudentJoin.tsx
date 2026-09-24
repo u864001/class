@@ -207,14 +207,29 @@ export const StudentJoin: React.FC<StudentJoinProps> = ({ initialRoomId = '', on
               {lastStudent.seatNum} 號 {lastStudent.studentName}
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => handleJoin(lastStudent.code, lastStudent.seatNum)}
-            className="px-4 py-2 rounded-xl btn-theme-primary font-bold text-xs shadow-xs active:scale-95 transition flex items-center space-x-1.5 flex-shrink-0"
-          >
-            <span>一鍵進入</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </button>
+          <div className="flex items-center space-x-2 flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                try {
+                  localStorage.removeItem('classqna_last_student');
+                } catch {}
+                setLastStudent(null);
+              }}
+              className="px-2.5 py-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs font-bold transition hover:bg-slate-100 dark:hover:bg-slate-800"
+              title="切換其他同學或清除記住的身分"
+            >
+              不是我
+            </button>
+            <button
+              type="button"
+              onClick={() => handleJoin(lastStudent.code, lastStudent.seatNum)}
+              className="px-4 py-2 rounded-xl btn-theme-primary font-bold text-xs shadow-xs active:scale-95 transition flex items-center space-x-1.5"
+            >
+              <span>一鍵進入</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       )}
 

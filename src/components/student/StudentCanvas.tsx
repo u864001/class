@@ -145,6 +145,11 @@ export const StudentCanvas: React.FC<StudentCanvasProps> = ({
     if (!isDrawingRef.current) return;
     isDrawingRef.current = false;
     pointsRef.current = [];
+    try {
+      if ((e.target as HTMLElement).hasPointerCapture?.(e.pointerId)) {
+        (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+      }
+    } catch {}
     saveState();
   };
 

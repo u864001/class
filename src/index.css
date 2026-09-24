@@ -201,3 +201,22 @@
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* Fallbacks for older Chromium / Smart Displays (閨蜜機) & Tablets */
+.app-shell {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* Ensure modal dialogs and form containers remain scrollable even when virtual keyboard appears */
+.modal-scrollable {
+  max-height: 85vh;
+  max-height: 85dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Drawing touch area isolation */
+.drawing-touch-area {
+  touch-action: none;
+}
