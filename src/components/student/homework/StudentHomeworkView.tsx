@@ -19,6 +19,8 @@ import {
   Lock,
   ShieldCheck,
   ShieldAlert,
+  UserCheck,
+  RotateCcw,
 } from 'lucide-react';
 import { Room, Submission, HomeworkQuestion } from '../../../types';
 import {
@@ -72,6 +74,7 @@ export const StudentHomeworkView: React.FC<StudentHomeworkViewProps> = ({
   const [submitting, setSubmitting] = useState(false);
   const [uploadingImg, setUploadingImg] = useState(false);
   const [showFinishedModal, setShowFinishedModal] = useState(false);
+  const [showIdentityConfirmModal, setShowIdentityConfirmModal] = useState(false);
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
   const [imageInputMode, setImageInputMode] = useState<'draw' | 'photo'>('draw');
 
@@ -181,15 +184,19 @@ export const StudentHomeworkView: React.FC<StudentHomeworkViewProps> = ({
       await handleSubmitCurrent();
     }
 
-    const ok = confirm(t('homework.lockSubmitConfirm'));
-    if (!ok) return;
+    // Open big identity confirmation card to prevent tampering & accidental submissions
+    setShowFinishedModal(false);
+    setShowIdentityConfirmModal(true);
+  };
 
+  const executeFinalLock = async () => {
     setLocking(true);
     try {
       const res = await lockStudentHomework(roomId, studentId, studentName, assignmentId);
       if (!res.success) throw new Error(res.error || '鎖定失敗');
 
       setIsLocked(true);
+      setShowIdentityConfirmModal(false);
       setShowFinishedModal(false);
       alert(t('homework.lockedSuccess'));
     } catch (err: any) {
@@ -830,6 +837,79 @@ export const StudentHomeworkView: React.FC<StudentHomeworkViewProps> = ({
               >
                 儲存離開
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Big Identity Confirmation Modal before Final Lock */}
+      {showIdentityConfirmModal && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="glass-panel max-w-lg w-full rounded-3xl p-6 sm:p-8 shadow-2xl border-2 border-amber-300 dark:border-amber-600 text-center space-y-6">
+            {/* Warning Icon */}
+            <div className="w-16 h-16 rounded-2xl bg-amber-100 dark:bg-amber-950/60 border border-amber-300 text-amber-600 flex items-center justify-center mx-auto shadow-sm">
+              <ShieldAlert className="w-9 h-9" />
+            </div>
+
+            <div>
+              <h3 className="text-2xl font-black text-slate-900 dark:text-slate-100 tracking-tight">
+                ⚠️ 請確認您的座號與姓名
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5">
+                送出後將永久鎖定作答內容，系統將嚴格記錄您的繳交身分與時間
+              </p>
+            </div>
+
+            {/* Big Identity Display Card */}
+            <div className="p-5 rounded-2xl bg-amber-50/90 dark:bg-slate-800/90 border-2 border-amber-200 dark:border-amber-800/60 space-y-2">
+              <div className="text-xs font-bold text-amber-800 dark:text-amber-400">
+                目前準備繳交作業的學生：
+              </div>
+              <div className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-slate-100 font-mono tracking-wide py-1">
+                {studentName}
+              </div>
+              <div className="text-xs text-slate-500 font-mono">
+                班級代碼：{roomId} ｜ 作業完成數：{completedCount} / {questions.length} 題
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-rose-50/80 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-xs font-semibold">
+              ⚠️ 請注意：若非本人作答，請勿替他人送出！故意頂替繳交或竄改他人作業將有系統紀錄。
+            </div>
+
+            {/* Action Buttons */}
+            <div className="space-y-2.5 pt-1">
+              <button
+                type="button"
+                onClick={executeFinalLock}
+                disabled={locking}
+                className="w-full py-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-black text-base shadow-lg transition flex items-center justify-center space-x-2"
+              >
+                {locking ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <UserCheck className="w-5 h-5" />
+                )}
+                <span>確定是我本人【{studentName}】，送出鎖定！</span>
+              </button>
+
+              <div className="flex space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setShowIdentityConfirmModal(false)}
+                  className="flex-1 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 transition"
+                >
+                  返回檢查題目
+                </button>
+                <button
+                  type="button"
+                  onClick={onLeave}
+                  className="flex-1 py-2.5 rounded-xl bg-rose-100 dark:bg-rose-950/50 hover:bg-rose-200 text-rose-700 dark:text-rose-300 text-xs font-bold transition flex items-center justify-center space-x-1"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>不是我，重新選座號</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
