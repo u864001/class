@@ -16,6 +16,7 @@ import {
 import { Room, RoomStudent } from '../../types';
 import { fetchRoster } from '../../lib/rosterApi';
 import { useI18n } from '../../context/I18nContext';
+import { playSound } from '../../lib/audio';
 
 interface LiveJoinLobbyModalProps {
   isOpen: boolean;
@@ -148,22 +149,7 @@ export const LiveJoinLobbyModal: React.FC<LiveJoinLobbyModalProps> = ({
     if (!isOpen) return;
 
     if (joinedCount > prevJoinedCountRef.current && soundEnabled && prevJoinedCountRef.current > 0) {
-      try {
-        const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(587.33, ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.12);
-        gain.gain.setValueAtTime(0.12, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.22);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.22);
-      } catch (e) {
-        // Ignore autoplay policy
-      }
+      playSound('student_join');
     }
     prevJoinedCountRef.current = joinedCount;
   }, [joinedCount, isOpen, soundEnabled]);
