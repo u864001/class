@@ -2,6 +2,7 @@ import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
 import { Submission, Room } from '../types';
 import { supabase } from './supabase';
+import { parseHomework } from './homeworkApi';
 
 export async function exportRoomResults(
   room: Room,
@@ -43,18 +44,26 @@ export async function exportRoomResults(
       累積總得分_Score: item.totalScore,
     }));
 
+  // Check if room is in homework mode
+  const hwData = parseHomework(room.question_note);
+  const qMap = new Map(hwData?.questions?.map((q) => [q.id, q]));
+
   // 3. Prepare Sheet 2: Submissions Details
-  const submissionData = allSubmissions.map((sub, idx) => ({
-    編號_No: idx + 1,
-    輪次_Round: sub.round_id,
-    學生座號_ID: sub.student_id,
-    學生姓名_Name: sub.student_name,
-    選擇題作答_Choice: sub.choice || '',
-    問答文字_Text: sub.text_answer || '',
-    作品圖片網址_ImageUrl: sub.image_url || '',
-    本題得分_EarnedScore: sub.earned_score || 0,
-    繳交時間_Time: new Date(sub.created_at).toLocaleString(),
-  }));
+  const submissionData = allSubmissions.map((sub, idx) => {
+    const qInfo = qMap.get(sub.round_id);
+    return {
+      編號_No: idx + 1,
+      題目編號_Question: qInfo ? `第 ${qInfo.num} 題 (${qInfo.type})` : sub.round_id,
+      題目說明_Prompt: qInfo ? qInfo.note : '',
+      學生座號_ID: sub.student_id,
+      學生姓名_Name: sub.student_name,
+      選擇題作答_Choice: sub.choice || '',
+      問答文字_Text: sub.text_answer || '',
+      作品圖片網址_ImageUrl: sub.image_url || '',
+      本題得分_EarnedScore: sub.earned_score || 0,
+      繳交時間_Time: new Date(sub.created_at).toLocaleString(),
+    };
+  });
 
   const wb = XLSX.utils.book_new();
   const wsLeaderboard = XLSX.utils.json_to_sheet(leaderboardData);
@@ -73,16 +82,18 @@ export async function exportRoomResults(
 
   if (imagesToDownload.length === 0) {
     // Download pure Excel
+    const baseTitle = hwData ? `作業成果_${hwData.title}_${room.id}` : `課堂成果_${room.id}`;
     const url = URL.createObjectURL(excelBlob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `課堂成果_${room.id}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    a.download = `${baseTitle}_${new Date().toISOString().slice(0, 10)}.xlsx`;
     a.click();
     URL.revokeObjectURL(url);
     return { success: true, isZip: false };
   }
 
   // Bundle into ZIP
+  const baseTitle = hwData ? `作業成果全包_${hwData.title}_${room.id}` : `課堂成果全包_${room.id}`;
   const zip = new JSZip();
   zip.file(`成績與作答明細.xlsx`, excelBlob);
 
@@ -104,7 +115,7 @@ export async function exportRoomResults(
   const zipUrl = URL.createObjectURL(zipBlob);
   const a = document.createElement('a');
   a.href = zipUrl;
-  a.download = `課堂成果全包_${room.id}_${new Date().toISOString().slice(0, 10)}.zip`;
+  a.download = `${baseTitle}_${new Date().toISOString().slice(0, 10)}.zip`;
   a.click();
   URL.revokeObjectURL(zipUrl);
   return { success: true, isZip: true };

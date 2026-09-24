@@ -3,6 +3,7 @@ import { Header } from './components/common/Header';
 import { TeacherView } from './components/teacher/TeacherView';
 import { StudentJoin } from './components/student/StudentJoin';
 import { StudentView } from './components/student/StudentView';
+import { StudentHomeworkView } from './components/student/homework/StudentHomeworkView';
 import { useTheme } from './context/ThemeContext';
 
 export const App: React.FC = () => {
@@ -12,6 +13,7 @@ export const App: React.FC = () => {
     studentId: string;
     studentName: string;
     seatNum: number;
+    isHomework?: boolean;
   } | null>(null);
 
   const { theme } = useTheme();
@@ -64,6 +66,13 @@ export const App: React.FC = () => {
           <StudentJoin
             initialRoomId={queryRoom}
             onJoined={(session) => setStudentSession(session)}
+          />
+        ) : studentSession.isHomework ? (
+          <StudentHomeworkView
+            roomId={studentSession.roomId}
+            studentId={studentSession.studentId}
+            studentName={studentSession.studentName}
+            onLeave={() => setStudentSession(null)}
           />
         ) : (
           <StudentView

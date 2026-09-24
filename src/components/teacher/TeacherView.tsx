@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { QrCode } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { QrCode, ArrowLeft } from 'lucide-react';
 import { RoomSetup } from './RoomSetup';
 import { QuestionPublisher } from './QuestionPublisher';
 import { LiveAnswerWall } from './LiveAnswerWall';
@@ -7,6 +7,9 @@ import { GradingView } from './GradingView';
 import { Leaderboard } from './Leaderboard';
 import { FloatingDock } from './FloatingDock';
 import { LiveJoinLobbyModal } from './LiveJoinLobbyModal';
+import { HomeworkBuilder } from './homework/HomeworkBuilder';
+import { HomeworkReview } from './homework/HomeworkReview';
+import { parseHomework } from '../../lib/homeworkApi';
 import { useRoom } from '../../hooks/useRoom';
 import { useSubmissions } from '../../hooks/useSubmissions';
 import { QuestionType } from '../../types';
@@ -21,6 +24,7 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ initialRoomId }) => {
   const [step, setStep] = useState<2 | 3 | 4 | 5>(2);
   const [showLobbyModal, setShowLobbyModal] = useState(false);
   const [advancingQuestion, setAdvancingQuestion] = useState(false);
+  const [hwView, setHwView] = useState<'builder' | 'review'>('builder');
 
   const { t } = useI18n();
 
@@ -29,6 +33,18 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ initialRoomId }) => {
     roomId,
     room?.current_round_id || null
   );
+
+  const isHomeworkMode = Boolean(
+    room?.status?.startsWith('homework_') || (room && parseHomework(room.question_note))
+  );
+
+  useEffect(() => {
+    if (room?.status === 'homework_active' || room?.status === 'homework_closed') {
+      setHwView('review');
+    } else if (room?.status === 'homework_prep') {
+      setHwView('builder');
+    }
+  }, [room?.status]);
 
   // If no room created yet, show Setup (Step 1 entry gate)
   if (!roomId || !room) {
@@ -39,6 +55,66 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ initialRoomId }) => {
           setStep(2);
         }}
       />
+    );
+  }
+
+  // --- Homework Mode View ---
+  if (isHomeworkMode) {
+    return (
+      <div className="pb-20 space-y-4">
+        {/* Top Navbar */}
+        <div className="max-w-5xl mx-auto px-3 sm:px-6 pt-4 flex items-center justify-between">
+          <button
+            onClick={() => setRoomId(null)}
+            className="px-3.5 py-2 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold text-xs flex items-center space-x-1.5 hover:border-slate-300 transition"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>返回選擇教室</span>
+          </button>
+
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setHwView('builder')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+                hwView === 'builder'
+                  ? 'btn-theme-primary shadow-xs'
+                  : 'bg-white/80 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500'
+              }`}
+            >
+              出題布題
+            </button>
+            <button
+              onClick={() => setHwView('review')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+                hwView === 'review'
+                  ? 'btn-theme-primary shadow-xs'
+                  : 'bg-white/80 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500'
+              }`}
+            >
+              作答檢閱與下載
+            </button>
+          </div>
+        </div>
+
+        {hwView === 'builder' ? (
+          <HomeworkBuilder
+            room={room}
+            onPublished={() => {
+              setHwView('review');
+              updateRoomState({ status: 'homework_active' });
+            }}
+          />
+        ) : (
+          <HomeworkReview
+            room={room}
+            onReopenBuilder={() => {
+              setHwView('builder');
+              updateRoomState({ status: 'homework_prep' });
+            }}
+            onRefreshRoom={() => updateRoomState({})}
+          />
+        )}
+      </div>
     );
   }
 

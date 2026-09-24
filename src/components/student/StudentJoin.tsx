@@ -3,6 +3,7 @@ import { LogIn, School, Loader2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { fetchRoster, formatClassLabel } from '../../lib/rosterApi';
 import { Room, ClassRosterStudent } from '../../types';
+import { parseHomework } from '../../lib/homeworkApi';
 import { useI18n } from '../../context/I18nContext';
 
 interface StudentJoinProps {
@@ -12,6 +13,7 @@ interface StudentJoinProps {
     studentId: string;
     studentName: string;
     seatNum: number;
+    isHomework?: boolean;
   }) => void;
 }
 
@@ -64,7 +66,8 @@ export const StudentJoin: React.FC<StudentJoinProps> = ({ initialRoomId = '', on
       return;
     }
 
-    if (!room) {
+    let targetRoom = room;
+    if (!targetRoom) {
       const { data, error } = await supabase
         .from('rooms')
         .select('*')
@@ -74,13 +77,24 @@ export const StudentJoin: React.FC<StudentJoinProps> = ({ initialRoomId = '', on
         alert('找不到此教室，請確認代碼是否正確！ / Classroom not found');
         return;
       }
+      targetRoom = data as Room;
+    }
+
+    const isHomework = Boolean(
+      targetRoom.status?.startsWith('homework_') || parseHomework(targetRoom.question_note)
+    );
+
+    // If homework is still in prep mode, block students from entering
+    if (targetRoom.status === 'homework_prep') {
+      alert(t('homework.studentPrepAlert'));
+      return;
     }
 
     let studentId = '';
     let studentName = '';
     let seatNum = parseInt(selectedSeat, 10) || 1;
 
-    if (room?.custom_class_enabled || !selectedClass) {
+    if (targetRoom.custom_class_enabled || !selectedClass) {
       studentId = `temp_${seatNum}`;
       studentName = nickname.trim() || `${seatNum}號同學`;
     } else {
@@ -90,20 +104,23 @@ export const StudentJoin: React.FC<StudentJoinProps> = ({ initialRoomId = '', on
       studentName = matched?.name || nickname.trim() || `${seatNum}號`;
     }
 
-    // Register presence in room_students
-    await supabase.from('room_students').upsert({
-      room_id: cleanRoomId,
-      student_id: studentId,
-      student_name: studentName,
-      is_online: true,
-      last_seen: new Date().toISOString(),
-    });
+    // Only register presence in room_students if NOT homework mode (to keep homework 100% REST)
+    if (!isHomework) {
+      await supabase.from('room_students').upsert({
+        room_id: cleanRoomId,
+        student_id: studentId,
+        student_name: studentName,
+        is_online: true,
+        last_seen: new Date().toISOString(),
+      });
+    }
 
     onJoined({
       roomId: cleanRoomId,
       studentId,
       studentName,
       seatNum,
+      isHomework,
     });
   };
 
@@ -143,10 +160,16 @@ export const StudentJoin: React.FC<StudentJoinProps> = ({ initialRoomId = '', on
             <div className="p-4 rounded-2xl bg-slate-50/80 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700 space-y-3">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-slate-800 dark:text-slate-200 font-bold">
-                  🏫 {room.teacher_name} 的教室
+                  🏫 {room.teacher_name} 的{room.status.startsWith('homework_') ? '回家作業' : '教室'}
                 </span>
                 <span className="text-theme font-semibold">
-                  {room.custom_class_enabled ? '自訂座號模式' : '固定名單模式'}
+                  {room.status.startsWith('homework_')
+                    ? room.status === 'homework_prep'
+                      ? '老師備課中'
+                      : '開放作答中'
+                    : room.custom_class_enabled
+                    ? '自訂座號模式'
+                    : '固定名單模式'}
                 </span>
               </div>
 

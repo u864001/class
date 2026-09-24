@@ -1,5 +1,32 @@
-export type RoomStatus = 'idle' | 'published' | 'answering' | 'stopped';
+export type RoomStatus =
+  | 'idle'
+  | 'published'
+  | 'answering'
+  | 'stopped'
+  | 'homework_prep'
+  | 'homework_active'
+  | 'homework_closed';
+
 export type QuestionType = 'choice' | 'text' | 'image';
+export type RoomMode = 'live' | 'homework';
+
+export interface HomeworkQuestion {
+  id: string; // e.g. "HW_Q1"
+  num: number;
+  type: QuestionType;
+  note: string;
+  score: number;
+  imageUrl: string | null;
+  options?: string[]; // for choice, e.g. ['A', 'B', 'C', 'D']
+  correctAnswer?: string | null; // e.g. 'A'
+}
+
+export interface HomeworkData {
+  is_homework: boolean;
+  title: string;
+  questions: HomeworkQuestion[];
+  created_at?: string;
+}
 
 export interface Room {
   id: string;
@@ -28,6 +55,9 @@ export interface Room {
   buzz_countdown: number;
   groups: string[];
   group_scores: Record<string, number>;
+  room_mode?: RoomMode;
+  homework_title?: string;
+  homework_questions?: HomeworkQuestion[];
   created_at: string;
 }
 
