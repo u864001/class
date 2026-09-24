@@ -10,6 +10,7 @@ import { LiveJoinLobbyModal } from './LiveJoinLobbyModal';
 import { useRoom } from '../../hooks/useRoom';
 import { useSubmissions } from '../../hooks/useSubmissions';
 import { QuestionType } from '../../types';
+import { useI18n } from '../../context/I18nContext';
 
 interface TeacherViewProps {
   initialRoomId?: string | null;
@@ -21,13 +22,15 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ initialRoomId }) => {
   const [showLobbyModal, setShowLobbyModal] = useState(false);
   const [advancingQuestion, setAdvancingQuestion] = useState(false);
 
+  const { t } = useI18n();
+
   const { room, students, updateRoomState, kickStudent } = useRoom(roomId);
   const { submissions, submissionMap, awardScore } = useSubmissions(
     roomId,
     room?.current_round_id || null
   );
 
-  // If no room created yet, show Setup
+  // If no room created yet, show Setup (Step 1 entry gate)
   if (!roomId || !room) {
     return (
       <RoomSetup
@@ -135,35 +138,41 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ initialRoomId }) => {
   };
 
   const handleResetScores = async () => {
-    if (!confirm('確定要清除全班的累計積分嗎？')) return;
+    if (!confirm('確定要清除全班的累計積分嗎？ / Clear all cumulative scores?')) return;
     await updateRoomState({
       cumulative_scores: {},
     });
   };
+
+  const stepItems = [
+    { s: 2, label: t('steps.step2') },
+    { s: 3, label: t('steps.step3') },
+    { s: 4, label: t('steps.step4') },
+    { s: 5, label: t('steps.step5') },
+  ];
 
   return (
     <div className="pb-28">
       {/* Top Step Dots Navigation & Lobby Shortcut */}
       <div className="max-w-xl mx-auto px-4 pt-5 pb-2">
         <div className="flex items-center justify-between mb-3">
-          <span className="text-xs font-bold text-slate-500">課堂互動流程</span>
+          <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+            {t('steps.flowTitle')}
+          </span>
           <button
             onClick={() => setShowLobbyModal(true)}
-            className="px-3 py-1 rounded-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs border border-indigo-200 transition shadow-2xs flex items-center space-x-1.5 active:scale-95"
-            title="開啟學生掃碼加入大廳"
+            className="px-3 py-1 rounded-full badge-theme text-xs font-bold border transition shadow-2xs flex items-center space-x-1.5 active:scale-95"
+            title="開啟學生掃碼加入大廳 / Open Lobby"
           >
-            <QrCode className="w-3.5 h-3.5 text-indigo-600" />
-            <span>投影報到大廳 ({students.length}人已加入)</span>
+            <QrCode className="w-3.5 h-3.5 text-theme" />
+            <span>
+              {t('steps.projectLobby')} ({t('steps.studentsJoined', { count: students.length })})
+            </span>
           </button>
         </div>
 
         <div className="flex items-center justify-between">
-          {[
-            { s: 2, label: '出題設定' },
-            { s: 3, label: '即時作答' },
-            { s: 4, label: '批改給分' },
-            { s: 5, label: '榮譽排行' },
-          ].map((item, idx) => (
+          {stepItems.map((item, idx) => (
             <React.Fragment key={item.s}>
               <button
                 onClick={() => setStep(item.s as any)}
@@ -172,17 +181,17 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ initialRoomId }) => {
                 <div
                   className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs transition ${
                     step === item.s
-                      ? 'bg-indigo-600 text-white shadow-glow-indigo scale-110'
+                      ? 'btn-theme-primary scale-110 shadow-glow-theme'
                       : step > item.s
-                      ? 'bg-emerald-100 text-emerald-700'
-                      : 'bg-slate-200 text-slate-500'
+                      ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400'
+                      : 'bg-slate-200 dark:bg-slate-700 text-slate-500'
                   }`}
                 >
                   {item.s - 1}
                 </div>
                 <span
                   className={`text-[11px] font-semibold ${
-                    step === item.s ? 'text-indigo-600 font-bold' : 'text-slate-400'
+                    step === item.s ? 'text-theme font-bold' : 'text-slate-400 dark:text-slate-500'
                   }`}
                 >
                   {item.label}
@@ -191,7 +200,7 @@ export const TeacherView: React.FC<TeacherViewProps> = ({ initialRoomId }) => {
               {idx < 3 && (
                 <div
                   className={`flex-1 h-0.5 mx-2 rounded-full ${
-                    step > item.s ? 'bg-emerald-300' : 'bg-slate-200'
+                    step > item.s ? 'bg-emerald-300 dark:bg-emerald-700' : 'bg-slate-200 dark:bg-slate-700'
                   }`}
                 />
               )}

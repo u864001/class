@@ -210,7 +210,7 @@ export const StudentCanvas: React.FC<StudentCanvasProps> = ({
             onClick={handleClear}
             disabled={disabled}
             title="清空畫布"
-            className="p-2 rounded-xl text-slate-600 hover:bg-slate-100 disabled:opacity-30 transition"
+            className="p-2 rounded-xl text-slate-600 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 disabled:opacity-30 transition"
           >
             <Trash2 className="w-4 h-4" />
           </button>

@@ -12,10 +12,10 @@ import {
   UserX,
   CheckCircle2,
   Clock,
-  ExternalLink,
 } from 'lucide-react';
 import { Room, RoomStudent } from '../../types';
 import { fetchRoster } from '../../lib/rosterApi';
+import { useI18n } from '../../context/I18nContext';
 
 interface LiveJoinLobbyModalProps {
   isOpen: boolean;
@@ -38,6 +38,8 @@ export const LiveJoinLobbyModal: React.FC<LiveJoinLobbyModalProps> = ({
   const [expectedList, setExpectedList] = useState<{ id: string; seatNum: number; name: string }[]>([]);
   const [kickingId, setKickingId] = useState<string | null>(null);
   const prevJoinedCountRef = useRef<number>(0);
+
+  const { t } = useI18n();
 
   // 1. 取得本教室的完整應到名單（依據選擇的班級或自訂人數）
   useEffect(() => {
@@ -121,16 +123,15 @@ export const LiveJoinLobbyModal: React.FC<LiveJoinLobbyModalProps> = ({
   const totalCount = lobbyStudents.length;
   const progressPercent = totalCount > 0 ? Math.round((joinedCount / totalCount) * 100) : 0;
 
-  // 踢除點錯或冒用座號的學生
+  // 踢除點錯或冒用座號的學生（維持嚴格紅色警示）
   const handleKickClick = async (
     matchedStudentId: string,
     seatNum: number,
     displayName: string
   ) => {
     if (!onKickStudent) return;
-    const seatLabel = seatNum > 0 ? `${seatNum} 號 ` : '';
     const ok = window.confirm(
-      `確定要將【${seatLabel}${displayName}】移出教室嗎？\n\n移出後：\n• 該學生 iPad 端將自動退回加入畫面重新選擇座號\n• 該座號將立即恢復為「尚未加入」\n• 正確的同學可重新選擇該座號加入`
+      t('lobby.kickConfirm', { name: displayName, id: seatNum })
     );
     if (!ok) return;
 
@@ -152,8 +153,8 @@ export const LiveJoinLobbyModal: React.FC<LiveJoinLobbyModalProps> = ({
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
         osc.type = 'sine';
-        osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
-        osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.12); // A5
+        osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.12);
         gain.gain.setValueAtTime(0.12, ctx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.22);
         osc.connect(gain);
@@ -161,7 +162,7 @@ export const LiveJoinLobbyModal: React.FC<LiveJoinLobbyModalProps> = ({
         osc.start();
         osc.stop(ctx.currentTime + 0.22);
       } catch (e) {
-        // 忽略自動播放限制
+        // Ignore autoplay policy
       }
     }
     prevJoinedCountRef.current = joinedCount;
@@ -169,7 +170,6 @@ export const LiveJoinLobbyModal: React.FC<LiveJoinLobbyModalProps> = ({
 
   if (!isOpen) return null;
 
-  // 學生加入的完整網址
   const studentJoinUrl = `${window.location.origin}${window.location.pathname}?room=${room.id}`;
 
   const displayedList =
@@ -183,30 +183,30 @@ export const LiveJoinLobbyModal: React.FC<LiveJoinLobbyModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-200">
-      <div className="glass-panel max-w-4xl w-full rounded-3xl p-6 sm:p-8 shadow-2xl relative border border-white/80 max-h-[92vh] overflow-y-auto space-y-6">
+      <div className="glass-panel max-w-4xl w-full rounded-3xl p-6 sm:p-8 shadow-2xl relative border border-white/80 dark:border-slate-700 max-h-[92vh] overflow-y-auto space-y-6">
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-5 right-5 p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 transition shadow-2xs"
-          title="關閉大廳"
+          className="absolute top-5 right-5 p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-300 transition shadow-2xs"
+          title={t('common.close')}
         >
           <X className="w-5 h-5" />
         </button>
 
         {/* Modal Header */}
         <div className="flex items-center space-x-3 pr-10">
-          <div className="w-10 h-10 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-600 shadow-2xs">
-            <Users className="w-5 h-5" />
+          <div className="w-10 h-10 rounded-2xl badge-theme flex items-center justify-center shadow-2xs">
+            <Users className="w-5 h-5 text-theme" />
           </div>
           <div>
-            <h3 className="font-extrabold text-slate-900 text-xl flex items-center space-x-2">
-              <span>學生掃碼報到大廳</span>
+            <h3 className="font-extrabold text-slate-900 dark:text-slate-100 text-xl flex items-center space-x-2">
+              <span>{t('lobby.title')}</span>
               <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold border border-emerald-200">
-                即時同步中
+                Live
               </span>
             </h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              請投影本畫面於大螢幕，學生使用 iPad 掃描 QR Code 或輸入房號即可即時報到！
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              {t('lobby.subtitle')}
             </p>
           </div>
         </div>
@@ -214,14 +214,16 @@ export const LiveJoinLobbyModal: React.FC<LiveJoinLobbyModalProps> = ({
         {/* Main Two-Column Layout */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
           {/* Left Column: QR Code & Room PIN Card */}
-          <div className="md:col-span-5 bg-white/90 rounded-3xl p-5 border border-slate-200 shadow-soft text-center space-y-4">
+          <div className="md:col-span-5 bg-white/90 dark:bg-slate-800/90 rounded-3xl p-5 border border-slate-200 dark:border-slate-700 shadow-soft text-center space-y-4">
             <div className="p-3 bg-white rounded-2xl inline-block shadow-xs border border-slate-100">
               <QRCodeSVG value={studentJoinUrl} size={190} level="M" />
             </div>
 
             <div>
-              <div className="text-xs text-slate-400 font-semibold mb-1">首頁輸入 6 碼教室代碼：</div>
-              <div className="text-3xl sm:text-4xl font-mono font-black text-indigo-600 tracking-widest bg-indigo-50/80 py-1.5 px-4 rounded-2xl border border-indigo-100/80 inline-block shadow-xs">
+              <div className="text-xs text-slate-400 font-semibold mb-1">
+                {t('lobby.roomCode')}：
+              </div>
+              <div className="text-3xl sm:text-4xl font-mono font-black text-theme tracking-widest badge-theme py-1.5 px-4 rounded-2xl inline-block shadow-xs">
                 {room.id}
               </div>
             </div>
@@ -229,31 +231,31 @@ export const LiveJoinLobbyModal: React.FC<LiveJoinLobbyModalProps> = ({
             <div className="flex items-center justify-center space-x-2 pt-1">
               <button
                 onClick={copyJoinLink}
-                className="px-3.5 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold transition flex items-center space-x-1.5 shadow-2xs active:scale-95"
+                className="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition flex items-center space-x-1.5 shadow-2xs active:scale-95"
               >
                 {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
-                <span>{copied ? '已複製連結！' : '複製加入網址'}</span>
+                <span>{copied ? t('common.copied') : t('common.copy')}</span>
               </button>
 
               <button
                 onClick={() => setSoundEnabled(!soundEnabled)}
                 className={`p-2 rounded-xl border transition shadow-2xs ${
                   soundEnabled
-                    ? 'bg-indigo-50 border-indigo-200 text-indigo-600'
-                    : 'bg-slate-100 border-slate-200 text-slate-400'
+                    ? 'badge-theme'
+                    : 'bg-slate-100 dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-400'
                 }`}
-                title={soundEnabled ? '點擊靜音' : '點擊開啟加入音效'}
+                title={soundEnabled ? '靜音 / Mute' : '開啟音效 / Unmute'}
               >
-                {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+                {soundEnabled ? <Volume2 className="w-4 h-4 text-theme" /> : <VolumeX className="w-4 h-4" />}
               </button>
             </div>
 
             <div className="pt-2">
               <button
                 onClick={onClose}
-                className="w-full py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold text-sm transition shadow-glow-indigo flex items-center justify-center space-x-2"
+                className="w-full py-3 rounded-2xl btn-theme-primary active:scale-95 font-bold text-sm transition flex items-center justify-center space-x-2"
               >
-                <span>開始課堂互動</span>
+                <span>{t('common.confirm')}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
@@ -262,22 +264,22 @@ export const LiveJoinLobbyModal: React.FC<LiveJoinLobbyModalProps> = ({
           {/* Right Column: Live Student Waiting Roster */}
           <div className="md:col-span-7 space-y-4">
             {/* Progress & Live Counter Banner */}
-            <div className="bg-gradient-to-r from-indigo-50 to-emerald-50 rounded-2xl p-4 border border-indigo-100/80 space-y-2.5 shadow-2xs">
+            <div className="bg-slate-50 dark:bg-slate-800/80 rounded-2xl p-4 border border-slate-200 dark:border-slate-700 space-y-2.5 shadow-2xs">
               <div className="flex items-center justify-between text-xs sm:text-sm font-bold">
-                <span className="text-slate-700 flex items-center space-x-1.5">
+                <span className="text-slate-700 dark:text-slate-200 flex items-center space-x-1.5">
                   <Sparkles className="w-4 h-4 text-amber-500" />
-                  <span>全班報到進度</span>
+                  <span>{t('lobby.joinedStudents', { count: joinedCount })}</span>
                 </span>
-                <span className="text-slate-800 font-mono">
-                  已加入 <span className="text-emerald-600 text-base">{joinedCount}</span> / {totalCount} 人
+                <span className="text-slate-800 dark:text-slate-300 font-mono">
+                  <span className="text-emerald-600 dark:text-emerald-400 text-base">{joinedCount}</span> / {totalCount} {t('common.people')}
                   <span className="text-slate-400 font-normal ml-1">({progressPercent}%)</span>
                 </span>
               </div>
 
               {/* Progress bar */}
-              <div className="w-full h-3 rounded-full bg-slate-200/80 overflow-hidden shadow-inner">
+              <div className="w-full h-3 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden shadow-inner">
                 <div
-                  className="h-full bg-gradient-to-r from-indigo-500 via-teal-500 to-emerald-500 transition-all duration-500"
+                  className="h-full bg-emerald-500 transition-all duration-500"
                   style={{ width: `${progressPercent}%` }}
                 />
               </div>
@@ -285,16 +287,16 @@ export const LiveJoinLobbyModal: React.FC<LiveJoinLobbyModalProps> = ({
 
             {/* Filter Tabs */}
             <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center bg-slate-100 p-0.5 rounded-xl text-xs font-bold">
+              <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl text-xs font-bold">
                 <button
                   onClick={() => setActiveTab('all')}
                   className={`px-3 py-1.5 rounded-lg transition ${
                     activeTab === 'all'
-                      ? 'bg-white text-indigo-600 shadow-2xs'
-                      : 'text-slate-500 hover:text-slate-700'
+                      ? 'bg-white dark:bg-slate-700 text-theme shadow-2xs'
+                      : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-200'
                   }`}
                 >
-                  全部名單 ({totalCount})
+                  全部 ({totalCount})
                 </button>
                 <button
                   onClick={() => setActiveTab('unjoined')}
@@ -304,7 +306,7 @@ export const LiveJoinLobbyModal: React.FC<LiveJoinLobbyModalProps> = ({
                       : 'text-slate-500 hover:text-amber-600'
                   }`}
                 >
-                  尚未加入 ({unjoinedStudents.length})
+                  未報到 ({unjoinedStudents.length})
                 </button>
                 <button
                   onClick={() => setActiveTab('joined')}
@@ -317,12 +319,6 @@ export const LiveJoinLobbyModal: React.FC<LiveJoinLobbyModalProps> = ({
                   已就緒 ({joinedCount})
                 </button>
               </div>
-
-              {unjoinedStudents.length > 0 && activeTab === 'unjoined' && (
-                <div className="text-xs text-amber-700 font-semibold hidden sm:block">
-                  提示：可提醒未到同學開啟相機掃描
-                </div>
-              )}
             </div>
 
             {/* Student Grid Roster */}
@@ -333,8 +329,8 @@ export const LiveJoinLobbyModal: React.FC<LiveJoinLobbyModalProps> = ({
                     key={st.id}
                     className={`px-3 py-2 rounded-2xl border transition-all duration-300 flex items-center justify-between text-xs ${
                       st.isJoined
-                        ? 'bg-emerald-50/90 border-emerald-300 text-emerald-900 shadow-2xs scale-[1.02] ring-2 ring-emerald-500/20'
-                        : 'bg-white/60 border-slate-200/80 text-slate-400 opacity-60'
+                        ? 'bg-emerald-50/90 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700 text-emerald-900 dark:text-emerald-200 shadow-2xs scale-[1.02] ring-2 ring-emerald-500/20'
+                        : 'bg-white/60 dark:bg-slate-800/60 border-slate-200/80 dark:border-slate-700 text-slate-400 opacity-60'
                     }`}
                   >
                     <div className="flex items-center space-x-2 truncate">
@@ -342,7 +338,7 @@ export const LiveJoinLobbyModal: React.FC<LiveJoinLobbyModalProps> = ({
                         className={`w-6 h-6 rounded-lg text-[11px] font-mono font-extrabold flex items-center justify-center flex-shrink-0 ${
                           st.isJoined
                             ? 'bg-emerald-500 text-white shadow-2xs'
-                            : 'bg-slate-200 text-slate-500'
+                            : 'bg-slate-200 dark:bg-slate-700 text-slate-500'
                         }`}
                       >
                         {st.seatNum}
@@ -356,6 +352,7 @@ export const LiveJoinLobbyModal: React.FC<LiveJoinLobbyModalProps> = ({
                       {st.isJoined ? (
                         <>
                           <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                          {/* Kick Student - ALWAYS Rose/Red for Safety */}
                           {onKickStudent && (
                             <button
                               type="button"
@@ -364,8 +361,8 @@ export const LiveJoinLobbyModal: React.FC<LiveJoinLobbyModalProps> = ({
                                 handleKickClick(st.matchedStudentId, st.seatNum, st.displayName);
                               }}
                               disabled={kickingId === st.matchedStudentId}
-                              title={`移出 ${st.displayName}（釋放座號）`}
-                              className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-100 transition active:scale-90 ml-0.5"
+                              title={`${t('lobby.kickStudentBtn')} ${st.displayName}`}
+                              className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-100 dark:hover:bg-rose-950/40 transition active:scale-90 ml-0.5"
                             >
                               <UserX className="w-3.5 h-3.5" />
                             </button>
@@ -381,7 +378,7 @@ export const LiveJoinLobbyModal: React.FC<LiveJoinLobbyModalProps> = ({
 
               {displayedList.length === 0 && (
                 <div className="text-center py-8 text-slate-400 text-xs font-semibold">
-                  {activeTab === 'unjoined' ? '🎉 太棒了！全班同學皆已全員加入教室！' : '目前尚無學生'}
+                  {activeTab === 'unjoined' ? '🎉 太棒了！全班同學皆已全員加入教室！' : t('lobby.waitingToJoin')}
                 </div>
               )}
             </div>

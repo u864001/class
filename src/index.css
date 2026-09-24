@@ -1,40 +1,148 @@
 @import "tailwindcss";
 
+:root {
+  /* Default: Morandi Indigo */
+  --theme-primary: #4f46e5;
+  --theme-primary-hover: #4338ca;
+  --theme-primary-light: #eef2ff;
+  --theme-primary-border: #c7d2fe;
+  --theme-primary-text: #3730a3;
+  --theme-glow: 0 10px 25px -5px rgba(79, 70, 229, 0.25);
+  --theme-bg-gradient: linear-gradient(135deg, #f8fafc 0%, #eef2ff 50%, #f5f3ff 100%);
+  --app-bg: #f8fafc;
+  --card-bg: rgba(255, 255, 255, 0.85);
+  --card-border: rgba(255, 255, 255, 0.6);
+  --text-main: #1e293b;
+  --text-muted: #64748b;
+}
+
+/* Morandi Slate (莫蘭迪灰 / 玄青石灰) */
+:root[data-theme="slate"] {
+  --theme-primary: #475569;
+  --theme-primary-hover: #334155;
+  --theme-primary-light: #f1f5f9;
+  --theme-primary-border: #cbd5e1;
+  --theme-primary-text: #1e293b;
+  --theme-glow: 0 10px 25px -5px rgba(71, 85, 105, 0.25);
+  --theme-bg-gradient: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 50%, #e2e8f0 100%);
+}
+
+/* Morandi Rose (莫蘭迪粉 / 暮色微醺粉) */
+:root[data-theme="rose"] {
+  --theme-primary: #a25872;
+  --theme-primary-hover: #8e475e;
+  --theme-primary-light: #fdf2f4;
+  --theme-primary-border: #fbcfe8;
+  --theme-primary-text: #702e45;
+  --theme-glow: 0 10px 25px -5px rgba(162, 88, 114, 0.28);
+  --theme-bg-gradient: linear-gradient(135deg, #fffafb 0%, #fdf2f4 50%, #fce7f3 100%);
+}
+
+/* Morandi Sage (莫蘭迪綠 / 鼠尾草綠) */
+:root[data-theme="sage"] {
+  --theme-primary: #4a7c59;
+  --theme-primary-hover: #3b6547;
+  --theme-primary-light: #f0f7f2;
+  --theme-primary-border: #c6e2ce;
+  --theme-primary-text: #284c33;
+  --theme-glow: 0 10px 25px -5px rgba(74, 124, 89, 0.25);
+  --theme-bg-gradient: linear-gradient(135deg, #f7faf8 0%, #f0f7f2 50%, #e3f0e7 100%);
+}
+
+/* Halloween Festival (萬聖節金橘神秘紫) */
+:root[data-theme="halloween"] {
+  --theme-primary: #ea580c;
+  --theme-primary-hover: #c2410c;
+  --theme-primary-light: #fff7ed;
+  --theme-primary-border: #fed7aa;
+  --theme-primary-text: #9a3412;
+  --theme-glow: 0 10px 30px -5px rgba(234, 88, 12, 0.35);
+  --theme-bg-gradient: linear-gradient(135deg, #fff7ed 0%, #fef3c7 40%, #fae8ff 100%);
+}
+
+/* Dark Mode Overrides */
+.dark {
+  --app-bg: #090d16;
+  --card-bg: rgba(18, 24, 38, 0.85);
+  --card-border: rgba(255, 255, 255, 0.1);
+  --text-main: #f1f5f9;
+  --text-muted: #94a3b8;
+  --theme-primary-light: rgba(255, 255, 255, 0.08);
+  --theme-primary-border: rgba(255, 255, 255, 0.18);
+  --theme-primary-text: #f8fafc;
+  --theme-bg-gradient: linear-gradient(135deg, #090d16 0%, #0f172a 50%, #1e1b4b 100%);
+}
+
+.dark[data-theme="slate"] {
+  --theme-bg-gradient: linear-gradient(135deg, #0b0f17 0%, #111827 50%, #1f2937 100%);
+  --theme-primary: #94a3b8;
+  --theme-primary-hover: #cbd5e1;
+}
+
+.dark[data-theme="rose"] {
+  --theme-bg-gradient: linear-gradient(135deg, #12090e 0%, #1f1118 50%, #2e1022 100%);
+  --theme-primary: #d67a99;
+  --theme-primary-hover: #e597b1;
+}
+
+.dark[data-theme="sage"] {
+  --theme-bg-gradient: linear-gradient(135deg, #09120c 0%, #0f1c13 50%, #172a1e 100%);
+  --theme-primary: #68ab7d;
+  --theme-primary-hover: #85c298;
+}
+
+.dark[data-theme="halloween"] {
+  --theme-bg-gradient: linear-gradient(135deg, #130a06 0%, #1e0f09 50%, #290b38 100%);
+  --theme-primary: #f97316;
+  --theme-primary-hover: #fb923c;
+}
+
 @layer base {
   body {
     font-family: 'Plus Jakarta Sans', 'Noto Sans TC', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
+    background: var(--app-bg);
+    color: var(--text-main);
   }
+}
+
+/* App Background Utility */
+.app-theme-bg {
+  background: var(--theme-bg-gradient);
 }
 
 /* Glassmorphism & Soft Lighting Styles */
 .glass-panel {
-  background: rgba(255, 255, 255, 0.75);
+  background: var(--card-bg);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.05), 0 0 1px 1px rgba(255, 255, 255, 0.8) inset;
+  border: 1px solid var(--card-border);
+  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.05), 0 0 1px 1px rgba(255, 255, 255, 0.3) inset;
 }
 
 .glass-card {
-  background: rgba(255, 255, 255, 0.85);
+  background: var(--card-bg);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.5);
+  border: 1px solid var(--card-border);
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.04), 0 8px 10px -6px rgba(0, 0, 0, 0.02);
 }
 
 .glass-pill {
-  background: rgba(255, 255, 255, 0.65);
+  background: var(--card-bg);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  border: 1px solid var(--card-border);
 }
 
 /* Apple-style Smooth Soft Shadows */
 .shadow-soft {
   box-shadow: 0 20px 50px -12px rgba(15, 23, 42, 0.08);
+}
+
+.shadow-glow-theme {
+  box-shadow: var(--theme-glow);
 }
 
 .shadow-glow-indigo {
@@ -43,6 +151,46 @@
 
 .shadow-glow-emerald {
   box-shadow: 0 10px 30px -5px rgba(16, 185, 129, 0.25);
+}
+
+/* Theme Button Utilities */
+.btn-theme-primary {
+  background-color: var(--theme-primary) !important;
+  color: #ffffff !important;
+  box-shadow: var(--theme-glow) !important;
+  transition: all 0.15s ease-in-out;
+}
+.btn-theme-primary:hover {
+  background-color: var(--theme-primary-hover) !important;
+  filter: brightness(1.05);
+}
+
+.badge-theme {
+  background-color: var(--theme-primary-light) !important;
+  border-color: var(--theme-primary-border) !important;
+  color: var(--theme-primary-text) !important;
+}
+
+.text-theme {
+  color: var(--theme-primary) !important;
+}
+
+.border-theme {
+  border-color: var(--theme-primary-border) !important;
+}
+
+/* Halloween Floating Pumpkin Animation */
+@keyframes floatPumpkin {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-6px) rotate(4deg);
+  }
+}
+
+.animate-pumpkin-float {
+  animation: floatPumpkin 3s ease-in-out infinite;
 }
 
 /* Hide scrollbars for clean presentation */

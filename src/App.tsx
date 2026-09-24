@@ -3,6 +3,7 @@ import { Header } from './components/common/Header';
 import { TeacherView } from './components/teacher/TeacherView';
 import { StudentJoin } from './components/student/StudentJoin';
 import { StudentView } from './components/student/StudentView';
+import { useTheme } from './context/ThemeContext';
 
 export const App: React.FC = () => {
   const [role, setRole] = useState<'teacher' | 'student'>('teacher');
@@ -12,6 +13,8 @@ export const App: React.FC = () => {
     studentName: string;
     seatNum: number;
   } | null>(null);
+
+  const { theme } = useTheme();
 
   // Check URL query parameters on load
   useEffect(() => {
@@ -29,7 +32,7 @@ export const App: React.FC = () => {
   const queryRoom = new URLSearchParams(window.location.search).get('room') || '';
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50/30 to-violet-50/20 text-slate-800 flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
+    <div className="min-h-screen app-theme-bg flex flex-col font-sans transition-colors duration-300">
       {/* Universal Top Header */}
       <Header
         role={role}
@@ -43,6 +46,15 @@ export const App: React.FC = () => {
             : undefined
         }
       />
+
+      {/* Optional Halloween decorative floating badge */}
+      {theme === 'halloween' && (
+        <div className="fixed bottom-4 right-4 z-30 pointer-events-none flex items-center space-x-2 text-2xl animate-pumpkin-float opacity-80 select-none">
+          <span>🎃</span>
+          <span>👻</span>
+          <span>✨</span>
+        </div>
+      )}
 
       {/* Main App Content */}
       <main className="flex-1 w-full max-w-7xl mx-auto px-2 sm:px-4">

@@ -30,7 +30,7 @@ import { StudentCanvas } from './StudentCanvas';
 import { compressAndUploadCanvas } from '../../lib/imageCompressor';
 import { supabase } from '../../lib/supabase';
 import { parseBroadcastDeck } from '../../lib/broadcastDeck';
-
+import { useI18n } from '../../context/I18nContext';
 
 interface StudentViewProps {
   roomId: string;
@@ -45,6 +45,7 @@ export const StudentView: React.FC<StudentViewProps> = ({
   studentName,
   onLeave,
 }) => {
+  const { t } = useI18n();
   // 處理被教師移出教室時的自動退回登入與提示
   const handleKicked = useCallback(() => {
     alert('⚠️ 您已被老師移出教室。\n\n若您點錯座號或姓名，請重新選擇正確的座號登入！');
@@ -265,14 +266,16 @@ export const StudentView: React.FC<StudentViewProps> = ({
   return (
     <div className="max-w-md mx-auto px-4 py-4 space-y-4 pb-12">
       {/* Student Top Mini Bar */}
-      <div className="glass-panel px-4 py-2.5 rounded-2xl flex items-center justify-between shadow-xs border border-white/60">
+      <div className="glass-panel px-4 py-2.5 rounded-2xl flex items-center justify-between shadow-xs border border-white/60 dark:border-slate-700">
         <div className="flex items-center space-x-2">
-          <div className="w-7 h-7 rounded-xl bg-indigo-100 text-indigo-700 font-extrabold text-xs flex items-center justify-center font-mono">
+          <div className="w-7 h-7 rounded-xl badge-theme font-extrabold text-xs flex items-center justify-center font-mono">
             {studentId.replace('temp_', '')}
           </div>
           <div>
-            <div className="font-bold text-xs text-slate-800">{studentName}</div>
-            <div className="text-[10px] text-slate-400 font-mono">房號：{room.id}</div>
+            <div className="font-bold text-xs text-slate-800 dark:text-slate-100">{studentName}</div>
+            <div className="text-[10px] text-slate-400 font-mono">
+              {t('header.roomCode')}：{room.id}
+            </div>
           </div>
         </div>
 
@@ -280,32 +283,32 @@ export const StudentView: React.FC<StudentViewProps> = ({
           {/* Connection status indicator */}
           <div className="flex items-center text-[10px] font-semibold">
             {connectionStatus === 'connected' && (
-              <span className="flex items-center space-x-1 text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+              <span className="flex items-center space-x-1 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 <span className="hidden sm:inline">已連線</span>
               </span>
             )}
             {connectionStatus === 'connecting' && (
-              <span className="flex items-center space-x-1 text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200 animate-pulse">
+              <span className="flex items-center space-x-1 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800 animate-pulse">
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
                 <span>同步中</span>
               </span>
             )}
             {connectionStatus === 'offline' && (
-              <span className="flex items-center space-x-1 text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">
+              <span className="flex items-center space-x-1 text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded-full border border-rose-200 dark:border-rose-800">
                 <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
                 <span>離線中</span>
               </span>
             )}
           </div>
 
-          <span className="text-xs font-bold px-2.5 py-1 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100">
-            {room.cumulative_scores?.[studentId] || 0} 分
+          <span className="text-xs font-bold px-2.5 py-1 rounded-xl badge-theme">
+            {room.cumulative_scores?.[studentId] || 0} {t('common.points')}
           </span>
           <button
             onClick={onLeave}
-            className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition"
-            title="離開教室"
+            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition"
+            title={t('header.exitRoom')}
           >
             <LogOut className="w-4 h-4" />
           </button>
@@ -314,38 +317,38 @@ export const StudentView: React.FC<StudentViewProps> = ({
 
       {/* Marquee Broadcast Banner */}
       {room.broadcast_text && (
-        <div className="px-4 py-2.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold flex items-center space-x-2 animate-pulse overflow-hidden">
+        <div className="px-4 py-2.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-xs font-semibold flex items-center space-x-2 animate-pulse overflow-hidden">
           <Megaphone className="w-4 h-4 text-amber-600 flex-shrink-0" />
           <span className="font-bold truncate">{room.broadcast_text}</span>
         </div>
       )}
 
       {/* Question Card */}
-      <div className="glass-panel rounded-3xl p-5 sm:p-6 shadow-soft border border-white/60 space-y-4">
+      <div className="glass-panel rounded-3xl p-5 sm:p-6 shadow-soft border border-white/60 dark:border-slate-700 space-y-4">
         {/* Status indicator / Countdown */}
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <span className="text-xs font-extrabold px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100">
-              第 {room.current_question_num} 題
+            <span className="text-xs font-extrabold px-2.5 py-0.5 rounded-full badge-theme">
+              {t('student.questionNum', { num: room.current_question_num })}
             </span>
-            <span className="text-xs font-bold text-slate-500">
-              {room.question_score} 分
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+              {t('student.scorePts', { pts: room.question_score })}
             </span>
           </div>
 
           {/* Sync Timer */}
           {isAnswering ? (
-            <div className="flex items-center space-x-1.5 font-mono font-black text-sm text-indigo-600 px-3 py-1 rounded-xl bg-indigo-50 border border-indigo-100">
+            <div className="flex items-center space-x-1.5 font-mono font-black text-sm badge-theme px-3 py-1 rounded-xl border">
               <Clock className="w-3.5 h-3.5 animate-spin" />
               <span>{remainingSeconds}s</span>
             </div>
           ) : isStopped ? (
-            <span className="text-xs font-bold text-slate-400 px-2.5 py-1 rounded-xl bg-slate-100">
-              已停止作答
+            <span className="text-xs font-bold text-slate-400 px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-800">
+              {t('answering.statusStopped')}
             </span>
           ) : (
-            <span className="text-xs font-bold text-amber-600 px-2.5 py-1 rounded-xl bg-amber-50">
-              等待老師開始
+            <span className="text-xs font-bold text-amber-600 px-2.5 py-1 rounded-xl bg-amber-50 dark:bg-amber-950/40">
+              {t('student.waitingQuestion')}
             </span>
           )}
         </div>
@@ -396,10 +399,10 @@ export const StudentView: React.FC<StudentViewProps> = ({
                       onClick={() => setSelectedChoice(opt)}
                       className={`h-20 rounded-2xl font-black text-2xl transition border active:scale-95 flex items-center justify-center ${
                         isSelected
-                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-glow-indigo ring-4 ring-indigo-500/20'
+                          ? 'btn-theme-primary ring-4 ring-indigo-500/20'
                           : isRevealedCorrect
-                          ? 'bg-emerald-100 border-emerald-400 text-emerald-800'
-                          : 'bg-white border-slate-200 text-slate-800 hover:border-indigo-300'
+                          ? 'bg-emerald-100 dark:bg-emerald-950/60 border-emerald-400 text-emerald-800 dark:text-emerald-300'
+                          : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 hover:border-indigo-300'
                       } disabled:opacity-60`}
                     >
                       {opt}
@@ -417,8 +420,8 @@ export const StudentView: React.FC<StudentViewProps> = ({
                   value={textAnswer}
                   onChange={(e) => setTextAnswer(e.target.value)}
                   disabled={!isAnswering || isStopped}
-                  placeholder="請在此輸入您的作答文字..."
-                  className="w-full px-4 py-3 rounded-2xl bg-white border border-slate-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none text-slate-800 text-sm disabled:opacity-60"
+                  placeholder={t('student.submitTextPlaceholder')}
+                  className="w-full px-4 py-3 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:border-indigo-500 outline-none text-slate-800 dark:text-slate-100 text-sm disabled:opacity-60"
                 />
                 <div className="text-right text-[11px] text-slate-400">{textAnswer.length} 字</div>
               </div>
@@ -437,17 +440,17 @@ export const StudentView: React.FC<StudentViewProps> = ({
             <button
               onClick={handleSubmit}
               disabled={!isAnswering || submitting}
-              className="w-full py-4 rounded-2xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white font-bold text-base transition shadow-glow-indigo flex items-center justify-center space-x-2 disabled:opacity-50"
+              className="w-full py-4 rounded-2xl btn-theme-primary active:scale-[0.99] font-bold text-base transition flex items-center justify-center space-x-2 disabled:opacity-50"
             >
               {submitting ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  <span>傳送中...</span>
+                  <span>{t('student.submitting')}</span>
                 </>
               ) : (
                 <>
                   <Send className="w-5 h-5" />
-                  <span>交答案</span>
+                  <span>{t('student.submitBtn')}</span>
                 </>
               )}
             </button>

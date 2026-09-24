@@ -36,10 +36,17 @@ import {
   History,
   Trophy,
   Flame,
+  UploadCloud,
+  FolderOpen,
+  Smartphone,
 } from 'lucide-react';
 import { Room, RoomStudent, BuzzEntry, VoteEntry } from '../../types';
 import { supabase } from '../../lib/supabase';
-import { captureScreenSlide } from '../../lib/imageCompressor';
+import {
+  captureScreenSlide,
+  isScreenCaptureSupported,
+  uploadSlideFromFile,
+} from '../../lib/imageCompressor';
 import {
   parseBroadcastDeck,
   serializeBroadcastDeck,
@@ -47,6 +54,7 @@ import {
   BroadcastDeckState,
 } from '../../lib/broadcastDeck';
 import { LiveJoinLobbyModal } from './LiveJoinLobbyModal';
+import { useI18n } from '../../context/I18nContext';
 
 // Web Audio API 音效產生器（免依賴外部音檔，跨平台穩定發聲）
 const playSound = (type: 'dice' | 'tick' | 'ding' | 'winner' | 'buzz_go' | 'times_up') => {
@@ -169,6 +177,7 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
   students,
   onKickStudent,
 }) => {
+  const { t } = useI18n();
   const [activeTool, setActiveTool] = useState<
     'qr' | 'broadcast' | 'timer' | 'dice' | 'picker' | 'vote' | 'group' | 'buzz' | 'screenshare' | null
   >(null);
@@ -234,7 +243,60 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
     setActiveTool(null);
   };
 
-  // --- Slide Deck Actions ---
+  // --- Slide Deck Multi-source Actions (螢幕截圖 / 後鏡頭拍照 / 前鏡頭拍照 / 選擇檔案) ---
+  const slideInputFileRef = useRef<HTMLInputElement>(null);
+  const slideInputCameraBackRef = useRef<HTMLInputElement>(null);
+  const slideInputCameraFrontRef = useRef<HTMLInputElement>(null);
+  const isRecapturingRef = useRef<boolean>(false);
+  const canCaptureScreen = isScreenCaptureSupported();
+
+  const handleUploadNewSlide = async (file: File | Blob) => {
+    const currentSlides = deck?.slides || [];
+    if (currentSlides.length >= 25) {
+      alert('單次課堂最多支援 25 頁快照講義，以維護學生連線品質與免費額度。');
+      return;
+    }
+    setSnappingScreen(true);
+    try {
+      const nextIndex = currentSlides.length;
+      const url = await uploadSlideFromFile(room.id, nextIndex, file);
+      const nextState: BroadcastDeckState = {
+        version: 2,
+        slides: [...currentSlides, url],
+        currentIndex: nextIndex,
+        mode: deck?.mode || 'sync',
+        updatedAt: Date.now(),
+      };
+      await onUpdateRoom({ broadcast_image_url: serializeBroadcastDeck(nextState) });
+      setActiveTool('screenshare');
+    } catch (err: any) {
+      alert('講義上傳失敗：' + (err.message || '請檢查檔案'));
+    } finally {
+      setSnappingScreen(false);
+    }
+  };
+
+  const handleRecaptureSlideFromFile = async (file: File | Blob) => {
+    if (!deck || deck.slides.length === 0) return;
+    setSnappingScreen(true);
+    try {
+      const currentIdx = deck.currentIndex;
+      const url = await uploadSlideFromFile(room.id, currentIdx, file);
+      const nextSlides = [...deck.slides];
+      nextSlides[currentIdx] = url;
+      const nextState: BroadcastDeckState = {
+        ...deck,
+        slides: nextSlides,
+        updatedAt: Date.now(),
+      };
+      await onUpdateRoom({ broadcast_image_url: serializeBroadcastDeck(nextState) });
+    } catch (err: any) {
+      alert('講義更新失敗：' + (err.message || '請檢查檔案'));
+    } finally {
+      setSnappingScreen(false);
+    }
+  };
+
   const handleCaptureNewSlide = async () => {
     const currentSlides = deck?.slides || [];
     if (currentSlides.length >= 25) {
@@ -812,8 +874,8 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
         <div className="glass-panel px-3 py-2 rounded-2xl shadow-soft flex items-center space-x-1 sm:space-x-1.5 border border-white/80">
           <button
             onClick={() => setActiveTool('qr')}
-            title="學生 QR Code"
-            className="p-2.5 rounded-xl hover:bg-indigo-50/80 text-slate-600 hover:text-indigo-600 transition"
+            title={t('lobby.title')}
+            className="p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 hover:text-theme transition"
           >
             <QrCode className="w-5 h-5" />
           </button>
@@ -821,7 +883,7 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
           <button
             onClick={() => setActiveTool('broadcast')}
             title="跑馬燈文字廣播"
-            className="p-2.5 rounded-xl hover:bg-indigo-50/80 text-slate-600 hover:text-indigo-600 transition"
+            className="p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 hover:text-theme transition"
           >
             <Megaphone className="w-5 h-5" />
           </button>
@@ -829,18 +891,18 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
           {/* 螢幕快照廣播按鈕 */}
           <button
             onClick={() => setActiveTool('screenshare')}
-            title="一鍵廣播螢幕快照講義至學生 iPad"
+            title={t('tools.screenshare')}
             className={`p-2.5 rounded-xl relative transition ${
               deck && deck.slides.length > 0
                 ? deck.mode === 'free'
                   ? 'bg-amber-100 text-amber-700 ring-2 ring-amber-400'
-                  : 'bg-indigo-100 text-indigo-700 ring-2 ring-indigo-400'
-                : 'hover:bg-indigo-50/80 text-slate-600 hover:text-indigo-600'
+                  : 'badge-theme ring-2 ring-indigo-400'
+                : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 hover:text-theme'
             }`}
           >
             <MonitorUp className="w-5 h-5" />
             {deck && deck.slides.length > 0 && (
-              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-indigo-600 text-white text-[9px] font-bold flex items-center justify-center shadow-xs">
+              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-theme text-white text-[9px] font-bold flex items-center justify-center shadow-xs">
                 {deck.slides.length}
               </span>
             )}
@@ -848,46 +910,46 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
 
           <button
             onClick={toggleLockScreen}
-            title={room.screen_locked ? '解鎖全班螢幕' : '鎖定全班螢幕'}
+            title={room.screen_locked ? t('tools.unlock') : t('tools.lock')}
             className={`p-2.5 rounded-xl transition ${
               room.screen_locked
-                ? 'bg-rose-50 text-rose-600 ring-2 ring-rose-500/30'
-                : 'hover:bg-indigo-50/80 text-slate-600 hover:text-indigo-600'
+                ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-600 ring-2 ring-rose-500/30'
+                : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 hover:text-theme'
             }`}
           >
             {room.screen_locked ? <Lock className="w-5 h-5" /> : <Unlock className="w-5 h-5" />}
           </button>
 
-          <div className="w-[1px] h-6 bg-slate-200/80" />
+          <div className="w-[1px] h-6 bg-slate-200 dark:bg-slate-700" />
 
           <button
             onClick={() => setActiveTool('timer')}
-            title="課堂獨立計時器"
-            className="p-2.5 rounded-xl hover:bg-indigo-50/80 text-slate-600 hover:text-indigo-600 transition"
+            title={t('tools.timer')}
+            className="p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 hover:text-theme transition"
           >
             <Timer className="w-5 h-5" />
           </button>
 
           <button
             onClick={() => setActiveTool('dice')}
-            title="骰子"
-            className="p-2.5 rounded-xl hover:bg-indigo-50/80 text-slate-600 hover:text-indigo-600 transition"
+            title={t('tools.dice')}
+            className="p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 hover:text-theme transition"
           >
             <Dices className="w-5 h-5" />
           </button>
 
           <button
             onClick={() => setActiveTool('picker')}
-            title="隨機抽籤點名"
-            className="p-2.5 rounded-xl hover:bg-indigo-50/80 text-slate-600 hover:text-indigo-600 transition"
+            title={t('tools.picker')}
+            className="p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 hover:text-theme transition"
           >
             <UserCheck className="w-5 h-5" />
           </button>
 
           <button
             onClick={() => setActiveTool('vote')}
-            title="即時投票"
-            className="p-2.5 rounded-xl hover:bg-indigo-50/80 text-slate-600 hover:text-indigo-600 transition"
+            title={t('tools.vote')}
+            className="p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 hover:text-theme transition"
           >
             <Vote className="w-5 h-5" />
           </button>
@@ -895,18 +957,18 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
           <button
             onClick={() => setActiveTool('group')}
             title="分組計分"
-            className="p-2.5 rounded-xl hover:bg-indigo-50/80 text-slate-600 hover:text-indigo-600 transition"
+            className="p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 hover:text-theme transition"
           >
             <Users2 className="w-5 h-5" />
           </button>
 
           <button
             onClick={() => setActiveTool('buzz')}
-            title="搶答工具"
+            title={t('tools.buzz')}
             className={`p-2.5 rounded-xl transition ${
               room.buzz_active
                 ? 'bg-amber-100 text-amber-700 animate-pulse'
-                : 'hover:bg-indigo-50/80 text-slate-600 hover:text-indigo-600'
+                : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 hover:text-theme'
             }`}
           >
             <Bell className="w-5 h-5" />
@@ -1026,6 +1088,52 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
                   )}
                 </div>
 
+                {/* Hidden Multi-source Inputs */}
+                <input
+                  type="file"
+                  ref={slideInputCameraBackRef}
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) {
+                      if (isRecapturingRef.current) handleRecaptureSlideFromFile(f);
+                      else handleUploadNewSlide(f);
+                    }
+                    e.target.value = '';
+                  }}
+                />
+                <input
+                  type="file"
+                  ref={slideInputCameraFrontRef}
+                  accept="image/*"
+                  capture="user"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) {
+                      if (isRecapturingRef.current) handleRecaptureSlideFromFile(f);
+                      else handleUploadNewSlide(f);
+                    }
+                    e.target.value = '';
+                  }}
+                />
+                <input
+                  type="file"
+                  ref={slideInputFileRef}
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) {
+                      if (isRecapturingRef.current) handleRecaptureSlideFromFile(f);
+                      else handleUploadNewSlide(f);
+                    }
+                    e.target.value = '';
+                  }}
+                />
+
                 {!deck || deck.slides.length === 0 ? (
                   <div className="py-4 space-y-4">
                     <div className="w-16 h-16 rounded-2xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center mx-auto">
@@ -1033,33 +1141,91 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
                     </div>
                     <div className="space-y-1">
                       <p className="text-sm font-bold text-slate-800">
-                        大螢幕故障？直接將畫面推送到學生 iPad！
+                        {canCaptureScreen
+                          ? '大螢幕故障？直接將畫面推送到學生 iPad！'
+                          : '智慧顯示器 / 平板拍照拍課本，秒級推送至學生 iPad！'}
                       </p>
                       <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                        擷取教師當前的電子書、PPT 或教材畫面，支援多頁翻頁、學生自由溫習與下課一鍵清空。
+                        {canCaptureScreen
+                          ? '支援電腦螢幕截圖、相機拍實體課本或上傳講義圖檔，學生可自由翻頁或全班同步溫習。'
+                          : '使用本機鏡頭直接拍攝實體課本、考卷，或選取相簿教材，自動壓縮建立多頁講義簿。'}
                       </p>
                     </div>
 
-                    <button
-                      onClick={handleCaptureNewSlide}
-                      disabled={snappingScreen}
-                      className="w-full py-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-xs flex items-center justify-center space-x-2 active:scale-95 disabled:opacity-50"
-                    >
-                      {snappingScreen ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>正在擷取螢幕畫面...</span>
-                        </>
+                    {/* Action buttons based on capability */}
+                    <div className="space-y-2">
+                      {canCaptureScreen ? (
+                        <button
+                          onClick={handleCaptureNewSlide}
+                          disabled={snappingScreen}
+                          className="w-full py-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-xs flex items-center justify-center space-x-2 active:scale-95 disabled:opacity-50"
+                        >
+                          {snappingScreen ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              <span>正在處理畫面...</span>
+                            </>
+                          ) : (
+                            <>
+                              <MonitorUp className="w-4 h-4" />
+                              <span>開始擷取電腦螢幕 (第 1 頁)</span>
+                            </>
+                          )}
+                        </button>
                       ) : (
-                        <>
-                          <Camera className="w-4 h-4" />
-                          <span>開始擷取第 1 頁講義</span>
-                        </>
+                        <button
+                          onClick={() => {
+                            isRecapturingRef.current = false;
+                            slideInputCameraBackRef.current?.click();
+                          }}
+                          disabled={snappingScreen}
+                          className="w-full py-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-xs flex items-center justify-center space-x-2 active:scale-95 disabled:opacity-50"
+                        >
+                          {snappingScreen ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              <span>正在壓縮並建立講義...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Camera className="w-4 h-4" />
+                              <span>📷 拍照拍課本/教材 (第 1 頁)</span>
+                            </>
+                          )}
+                        </button>
                       )}
-                    </button>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            isRecapturingRef.current = false;
+                            slideInputCameraBackRef.current?.click();
+                          }}
+                          disabled={snappingScreen}
+                          className="py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center space-x-1.5"
+                        >
+                          <Camera className="w-3.5 h-3.5" />
+                          <span>後鏡頭拍照</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            isRecapturingRef.current = false;
+                            slideInputFileRef.current?.click();
+                          }}
+                          disabled={snappingScreen}
+                          className="py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center space-x-1.5"
+                        >
+                          <UploadCloud className="w-3.5 h-3.5" />
+                          <span>選擇講義檔案</span>
+                        </button>
+                      </div>
+                    </div>
 
                     <div className="text-[11px] text-slate-400 bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-left">
-                      💡 採用超高壓縮比 WebP（每頁僅 ~40KB），且下課銷毀時自動清空，嚴守免費帳號配額。
+                      💡 支援電腦截圖、平板/閨蜜機相機拍照與檔案上傳，超高壓縮比 WebP（每頁 ~40KB），嚴守免費帳號配額。
                     </div>
                   </div>
                 ) : (
@@ -1121,34 +1287,77 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
                     </div>
 
                     {/* Slide Manipulation: Add next slide OR Recapture this slide */}
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        onClick={handleCaptureNewSlide}
-                        disabled={snappingScreen || deck.slides.length >= 25}
-                        className="py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-xs disabled:opacity-50"
-                      >
-                        {snappingScreen ? (
-                          <>
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            <span>擷取中...</span>
-                          </>
-                        ) : (
-                          <>
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        {canCaptureScreen ? (
+                          <button
+                            onClick={handleCaptureNewSlide}
+                            disabled={snappingScreen || deck.slides.length >= 25}
+                            className="py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-xs disabled:opacity-50"
+                          >
                             <Plus className="w-4 h-4" />
-                            <span>拍攝下一頁 ({deck.slides.length + 1})</span>
-                          </>
+                            <span>截取下一頁 ({deck.slides.length + 1})</span>
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              isRecapturingRef.current = false;
+                              slideInputCameraBackRef.current?.click();
+                            }}
+                            disabled={snappingScreen || deck.slides.length >= 25}
+                            className="py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-xs disabled:opacity-50"
+                          >
+                            <Camera className="w-4 h-4" />
+                            <span>拍照下一頁 ({deck.slides.length + 1})</span>
+                          </button>
                         )}
-                      </button>
 
-                      <button
-                        onClick={handleRecaptureCurrentSlide}
-                        disabled={snappingScreen}
-                        className="py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center space-x-1.5 disabled:opacity-50"
-                        title="以新快照覆寫目前這頁內容"
-                      >
-                        <RefreshCw className="w-3.5 h-3.5" />
-                        <span>重拍目前這頁</span>
-                      </button>
+                        <button
+                          onClick={() => {
+                            isRecapturingRef.current = false;
+                            slideInputFileRef.current?.click();
+                          }}
+                          disabled={snappingScreen || deck.slides.length >= 25}
+                          className="py-2.5 px-3 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs flex items-center justify-center space-x-1.5 shadow-2xs disabled:opacity-50"
+                        >
+                          <UploadCloud className="w-3.5 h-3.5" />
+                          <span>上傳圖檔 ({deck.slides.length + 1})</span>
+                        </button>
+                      </div>
+
+                      {/* Recapture controls */}
+                      <div className="flex items-center justify-center space-x-2 pt-1 border-t border-slate-100">
+                        <span className="text-[11px] text-slate-400 font-medium">重拍覆蓋目前這頁：</span>
+                        {canCaptureScreen && (
+                          <button
+                            onClick={handleRecaptureCurrentSlide}
+                            disabled={snappingScreen}
+                            className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold"
+                          >
+                            螢幕重截
+                          </button>
+                        )}
+                        <button
+                          onClick={() => {
+                            isRecapturingRef.current = true;
+                            slideInputCameraBackRef.current?.click();
+                          }}
+                          disabled={snappingScreen}
+                          className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold"
+                        >
+                          相機重拍
+                        </button>
+                        <button
+                          onClick={() => {
+                            isRecapturingRef.current = true;
+                            slideInputFileRef.current?.click();
+                          }}
+                          disabled={snappingScreen}
+                          className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold"
+                        >
+                          檔案重選
+                        </button>
+                      </div>
                     </div>
 
                     {/* Mode Control Card: Free review vs Forced sync */}

@@ -285,4 +285,138 @@ export async function captureScreenSlide(roomId: string, slideIndex: number): Pr
   }
 }
 
+/**
+ * 檢查當前瀏覽器與作業系統是否支援螢幕截圖錄製 (Desktop getDisplayMedia)
+ */
+export function isScreenCaptureSupported(): boolean {
+  return (
+    typeof navigator !== 'undefined' &&
+    !!navigator.mediaDevices &&
+    typeof navigator.mediaDevices.getDisplayMedia === 'function'
+  );
+}
+
+/**
+ * 將使用者拍攝的照片或選取的圖檔壓縮為 WebP，並作為特定頁碼的講義快照上傳
+ * 讓平板、閨蜜機或手機也能如同電腦截圖般快速建立多頁講義簿
+ */
+export async function uploadSlideFromFile(
+  roomId: string,
+  slideIndex: number,
+  file: File | Blob
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const maxW = 1440;
+        let targetW = img.width;
+        let targetH = img.height;
+        if (targetW > maxW) {
+          targetH = Math.round((img.height * maxW) / img.width);
+          targetW = maxW;
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = targetW;
+        canvas.height = targetH;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(e.target?.result as string);
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, targetW, targetH);
+        canvas.toBlob(
+          async (blob) => {
+            if (!blob) {
+              resolve(canvas.toDataURL('image/jpeg', 0.75));
+              return;
+            }
+
+            try {
+              const filePath = `${roomId}/slide_${slideIndex}_${Date.now()}.webp`;
+              const { error } = await supabase.storage
+                .from('class_assets')
+                .upload(filePath, blob, {
+                  contentType: 'image/webp',
+                  cacheControl: '3600',
+                  upsert: true,
+                });
+
+              if (error) {
+                console.warn('Storage 上傳異常，改用本地快照：', error.message);
+                resolve(canvas.toDataURL('image/jpeg', 0.7));
+                return;
+              }
+
+              const { data } = supabase.storage
+                .from('class_assets')
+                .getPublicUrl(filePath);
+
+              resolve(data.publicUrl);
+            } catch (err) {
+              console.warn('上傳例外，使用本地快照：', err);
+              resolve(canvas.toDataURL('image/jpeg', 0.7));
+            }
+          },
+          'image/webp',
+          0.78
+        );
+      };
+      img.onerror = () => reject(new Error('無法載入講義圖片'));
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = () => reject(new Error('讀取講義檔案失敗'));
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * 將教師畫筆批註後的學生作品 Canvas 壓縮為 WebP 上傳，用於覆蓋或廣播
+ */
+export async function uploadAnnotatedCanvas(
+  canvas: HTMLCanvasElement,
+  roomId: string,
+  studentId: string,
+  prefix: string = 'annotated'
+): Promise<string> {
+  return new Promise((resolve) => {
+    canvas.toBlob(
+      async (blob) => {
+        if (!blob) {
+          resolve(canvas.toDataURL('image/jpeg', 0.8));
+          return;
+        }
+
+        try {
+          const filePath = `${roomId}/annotations/${prefix}_${studentId}_${Date.now()}.webp`;
+          const { error } = await supabase.storage
+            .from('class_assets')
+            .upload(filePath, blob, {
+              contentType: 'image/webp',
+              cacheControl: '3600',
+              upsert: true,
+            });
+
+          if (error) {
+            console.warn('Annotation upload error, falling back to data URL:', error.message);
+            resolve(canvas.toDataURL('image/jpeg', 0.8));
+            return;
+          }
+
+          const { data } = supabase.storage.from('class_assets').getPublicUrl(filePath);
+          resolve(data.publicUrl);
+        } catch (err) {
+          console.warn('Annotation upload exception, falling back to data URL:', err);
+          resolve(canvas.toDataURL('image/jpeg', 0.8));
+        }
+      },
+      'image/webp',
+      0.82
+    );
+  });
+}
+
 

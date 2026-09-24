@@ -1,56 +1,75 @@
 import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
 import { Submission, Room } from '../types';
+import { supabase } from './supabase';
 
 export async function exportRoomResults(
   room: Room,
-  submissions: Submission[]
-) {
-  // 1. Prepare Sheet 1: Leaderboard / Total Scores
+  fallbackSubmissions: Submission[] = []
+): Promise<{ success: boolean; isZip: boolean }> {
+  // 1. Fetch all historical submissions across all rounds for this room
+  let allSubmissions = fallbackSubmissions;
+  try {
+    const { data, error } = await supabase
+      .from('submissions')
+      .select('*')
+      .eq('room_id', room.id.toUpperCase())
+      .order('created_at', { ascending: true });
+
+    if (!error && data && data.length > 0) {
+      allSubmissions = data as Submission[];
+    }
+  } catch (err) {
+    console.warn('Could not fetch all room submissions, using fallback:', err);
+  }
+
+  // 2. Prepare Sheet 1: Leaderboard / Total Scores
   const studentTotals: Record<string, { id: string; name: string; totalScore: number }> = {};
   for (const [id, score] of Object.entries(room.cumulative_scores || {})) {
-    const sub = submissions.find(s => s.student_id === id);
+    const sub = allSubmissions.find((s) => s.student_id === id);
     studentTotals[id] = {
       id,
       name: sub?.student_name || id,
-      totalScore: score
+      totalScore: score,
     };
   }
 
   const leaderboardData = Object.values(studentTotals)
     .sort((a, b) => b.totalScore - a.totalScore)
     .map((item, index) => ({
-      '名次': index + 1,
-      '學生座號/ID': item.id,
-      '學生姓名': item.name,
-      '累積總得分': item.totalScore
+      名次_Rank: index + 1,
+      學生座號_ID: item.id,
+      學生姓名_Name: item.name,
+      累積總得分_Score: item.totalScore,
     }));
 
-  // 2. Prepare Sheet 2: Submissions Details
-  const submissionData = submissions.map((sub, idx) => ({
-    '編號': idx + 1,
-    '輪次 ID': sub.round_id,
-    '學生座號/ID': sub.student_id,
-    '學生姓名': sub.student_name,
-    '選擇題作答': sub.choice || '',
-    '問答文字': sub.text_answer || '',
-    '作品圖片網址': sub.image_url || '',
-    '本題得分': sub.earned_score,
-    '繳交時間': new Date(sub.created_at).toLocaleTimeString()
+  // 3. Prepare Sheet 2: Submissions Details
+  const submissionData = allSubmissions.map((sub, idx) => ({
+    編號_No: idx + 1,
+    輪次_Round: sub.round_id,
+    學生座號_ID: sub.student_id,
+    學生姓名_Name: sub.student_name,
+    選擇題作答_Choice: sub.choice || '',
+    問答文字_Text: sub.text_answer || '',
+    作品圖片網址_ImageUrl: sub.image_url || '',
+    本題得分_EarnedScore: sub.earned_score || 0,
+    繳交時間_Time: new Date(sub.created_at).toLocaleString(),
   }));
 
   const wb = XLSX.utils.book_new();
   const wsLeaderboard = XLSX.utils.json_to_sheet(leaderboardData);
   const wsSubmissions = XLSX.utils.json_to_sheet(submissionData);
 
-  XLSX.utils.book_append_sheet(wb, wsLeaderboard, '總得分排行');
-  XLSX.utils.book_append_sheet(wb, wsSubmissions, '詳細作答紀錄');
+  XLSX.utils.book_append_sheet(wb, wsLeaderboard, '總得分排行_Leaderboard');
+  XLSX.utils.book_append_sheet(wb, wsSubmissions, '詳細作答紀錄_Details');
 
   const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-  const excelBlob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const excelBlob = new Blob([excelBuffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
 
-  // 3. Check for images to bundle into ZIP
-  const imagesToDownload = submissions.filter(s => !!s.image_url);
+  // 4. Check for images to bundle into ZIP
+  const imagesToDownload = allSubmissions.filter((s) => !!s.image_url);
 
   if (imagesToDownload.length === 0) {
     // Download pure Excel
@@ -60,7 +79,7 @@ export async function exportRoomResults(
     a.download = `課堂成果_${room.id}_${new Date().toISOString().slice(0, 10)}.xlsx`;
     a.click();
     URL.revokeObjectURL(url);
-    return;
+    return { success: true, isZip: false };
   }
 
   // Bundle into ZIP
@@ -74,7 +93,8 @@ export async function exportRoomResults(
       const res = await fetch(s.image_url);
       const blob = await res.blob();
       const ext = s.image_url.endsWith('.webp') ? 'webp' : 'jpg';
-      imgFolder?.file(`${s.student_id}_${s.student_name}.${ext}`, blob);
+      const cleanRound = (s.round_id || 'R1').replace(/[^a-zA-Z0-9_-]/g, '');
+      imgFolder?.file(`${cleanRound}_${s.student_id}_${s.student_name}.${ext}`, blob);
     } catch (e) {
       console.warn('Failed to fetch image for zip:', s.image_url, e);
     }
@@ -87,4 +107,5 @@ export async function exportRoomResults(
   a.download = `課堂成果全包_${room.id}_${new Date().toISOString().slice(0, 10)}.zip`;
   a.click();
   URL.revokeObjectURL(zipUrl);
+  return { success: true, isZip: true };
 }

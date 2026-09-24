@@ -1,7 +1,20 @@
 import React, { useState } from 'react';
-import { Play, Square, Plus, ArrowRight, CheckCircle, Clock, Users, Sparkles, UserX, Copy, Check, Filter, X } from 'lucide-react';
+import {
+  Play,
+  Square,
+  Plus,
+  ArrowRight,
+  CheckCircle,
+  Clock,
+  Users,
+  UserX,
+  Copy,
+  Check,
+  X,
+} from 'lucide-react';
 import { Room, RoomStudent, Submission } from '../../types';
 import { useSyncTimer } from '../../hooks/useSyncTimer';
+import { useI18n } from '../../context/I18nContext';
 
 interface LiveAnswerWallProps {
   room: Room;
@@ -29,6 +42,8 @@ export const LiveAnswerWall: React.FC<LiveAnswerWallProps> = ({
   const [filterMode, setFilterMode] = useState<'all' | 'unsubmitted'>('all');
   const [showUnsubmittedDrawer, setShowUnsubmittedDrawer] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  const { t } = useI18n();
 
   // Server-synced timer
   const remainingSeconds = useSyncTimer(
@@ -63,34 +78,39 @@ export const LiveAnswerWall: React.FC<LiveAnswerWallProps> = ({
   return (
     <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
       {/* Top Controls & Status Bar */}
-      <div className="glass-panel rounded-3xl p-6 sm:p-8 shadow-soft border border-white/60">
+      <div className="glass-panel rounded-3xl p-6 sm:p-8 shadow-soft border border-white/60 dark:border-slate-700">
         <div className="flex flex-col md:flex-row items-center justify-between gap-6">
           {/* Left: Question Title & Info */}
           <div>
             <div className="flex items-center space-x-2">
-              <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100">
-                第 {room.current_question_num} 題
+              <span className="text-xs font-bold px-2.5 py-0.5 rounded-full badge-theme">
+                {t('answering.questionTitle', { num: room.current_question_num })}
               </span>
-              <span className="text-xs font-semibold text-slate-500">
-                {room.question_type === 'choice' && '選擇題 ABCD'}
-                {room.question_type === 'text' && '文字作答題'}
-                {room.question_type === 'image' && '畫布/照片題'}
+              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                {room.question_type === 'choice' && t('publisher.typeChoice')}
+                {room.question_type === 'text' && t('publisher.typeText')}
+                {room.question_type === 'image' && t('publisher.typeImage')}
               </span>
             </div>
-            <h2 className="text-xl sm:text-2xl font-bold text-slate-800 mt-1">
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1">
               {room.question_note || `請進行第 ${room.current_question_num} 題作答`}
             </h2>
+
             {/* Live Counter & Unsubmitted Pill */}
             <div className="flex flex-wrap items-center gap-3 mt-3">
-              <div className="flex items-center space-x-1.5 text-xs sm:text-sm font-semibold text-slate-600">
-                <Users className="w-4 h-4 text-indigo-500" />
-                <span>已繳交：</span>
-                <span className="text-emerald-600 font-bold text-base">{submittedCount}</span>
-                <span className="text-slate-400">/ {totalSeats} 人 ({progressPercent}%)</span>
+              <div className="flex items-center space-x-1.5 text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-300">
+                <Users className="w-4 h-4 text-theme" />
+                <span>
+                  {t('answering.answeredStats', {
+                    answered: submittedCount,
+                    total: totalSeats,
+                    percent: progressPercent,
+                  })}
+                </span>
               </div>
-              <div className="w-28 sm:w-36 h-2 rounded-full bg-slate-100 overflow-hidden hidden sm:block">
+              <div className="w-28 sm:w-36 h-2 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden hidden sm:block">
                 <div
-                  className="h-full bg-gradient-to-r from-indigo-500 to-emerald-500 transition-all duration-500"
+                  className="h-full bg-emerald-500 transition-all duration-500"
                   style={{ width: `${progressPercent}%` }}
                 />
               </div>
@@ -99,10 +119,10 @@ export const LiveAnswerWall: React.FC<LiveAnswerWallProps> = ({
               {unsubmittedSeats.length > 0 && (
                 <button
                   onClick={() => setShowUnsubmittedDrawer(true)}
-                  className="px-2.5 py-1 rounded-full bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 text-xs font-bold transition flex items-center space-x-1 shadow-xs active:scale-95"
+                  className="px-2.5 py-1 rounded-full bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 text-xs font-bold transition flex items-center space-x-1 shadow-xs active:scale-95"
                 >
                   <UserX className="w-3.5 h-3.5 text-amber-600" />
-                  <span>未交卷名單 ({unsubmittedSeats.length}人)</span>
+                  <span>未交卷 ({unsubmittedSeats.length}人)</span>
                 </button>
               )}
             </div>
@@ -114,16 +134,20 @@ export const LiveAnswerWall: React.FC<LiveAnswerWallProps> = ({
               className={`w-28 h-28 rounded-3xl flex flex-col items-center justify-center border transition-all ${
                 isAnswering
                   ? remainingSeconds <= 5
-                    ? 'bg-rose-50 border-rose-200 text-rose-600 animate-pulse ring-4 ring-rose-500/20'
-                    : 'bg-indigo-50/80 border-indigo-200 text-indigo-700 shadow-glow-indigo'
-                  : 'bg-slate-100 border-slate-200 text-slate-400'
+                    ? 'bg-rose-50 dark:bg-rose-950/50 border-rose-200 dark:border-rose-800 text-rose-600 animate-pulse ring-4 ring-rose-500/20'
+                    : 'badge-theme border-current shadow-glow-theme'
+                  : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-400'
               }`}
             >
               <span className="text-4xl font-extrabold font-mono tracking-tighter">
                 {isAnswering ? remainingSeconds : isStopped ? '⏹️' : '⏱️'}
               </span>
               <span className="text-[11px] font-bold mt-0.5">
-                {isAnswering ? '剩餘秒數' : isStopped ? '作答已結束' : '等待開始'}
+                {isAnswering
+                  ? t('answering.statusAnswering')
+                  : isStopped
+                  ? t('answering.statusStopped')
+                  : t('answering.statusPublished')}
               </span>
             </div>
           </div>
@@ -136,32 +160,33 @@ export const LiveAnswerWall: React.FC<LiveAnswerWallProps> = ({
                 className="px-6 py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm transition shadow-glow-emerald flex items-center space-x-2 active:scale-95"
               >
                 <Play className="w-4 h-4 fill-current" />
-                <span>{isStopped ? '重新開始作答' : '開始計時作答'}</span>
+                <span>{isStopped ? '重新開始作答' : t('answering.startBtn')}</span>
               </button>
             ) : (
               <>
                 <button
                   onClick={() => onExtendTime(10)}
-                  className="px-4 py-3.5 rounded-2xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-sm transition flex items-center space-x-1.5 shadow-xs"
+                  className="px-4 py-3.5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 text-slate-700 dark:text-slate-200 font-bold text-sm transition flex items-center space-x-1.5 shadow-xs"
                 >
-                  <Plus className="w-4 h-4 text-indigo-600" />
-                  <span>加 10 秒</span>
+                  <Plus className="w-4 h-4 text-theme" />
+                  <span>+10{t('common.seconds')}</span>
                 </button>
+                {/* Immediate Stop - STRICTLY ROSE/RED FOR SAFETY */}
                 <button
                   onClick={onStopAnswering}
                   className="px-6 py-3.5 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-sm transition shadow-xs flex items-center space-x-2 active:scale-95"
                 >
                   <Square className="w-4 h-4 fill-current" />
-                  <span>立即截止</span>
+                  <span>{t('answering.stopBtn')}</span>
                 </button>
               </>
             )}
 
             <button
               onClick={onGoToGrading}
-              className="px-6 py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm transition shadow-glow-indigo flex items-center space-x-2 active:scale-95 disabled:opacity-50"
+              className="px-6 py-3.5 rounded-2xl btn-theme-primary font-bold text-sm transition flex items-center space-x-2 active:scale-95"
             >
-              <span>前往批改/對答案</span>
+              <span>{t('answering.goToGrading')}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>
@@ -172,19 +197,18 @@ export const LiveAnswerWall: React.FC<LiveAnswerWallProps> = ({
       <div>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
           <div className="flex items-center space-x-3">
-            <h3 className="font-bold text-slate-700 text-sm sm:text-base flex items-center space-x-2">
-              <span>全班即時作答進度牆</span>
-              <span className="text-xs font-normal text-slate-400 hidden sm:inline">（學生送出答案即刻亮起綠燈）</span>
+            <h3 className="font-bold text-slate-700 dark:text-slate-200 text-sm sm:text-base flex items-center space-x-2">
+              <span>{t('answering.wallTitle')}</span>
             </h3>
 
             {/* Filter Toggle */}
-            <div className="flex items-center bg-slate-100 p-0.5 rounded-xl text-xs font-bold">
+            <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl text-xs font-bold">
               <button
                 onClick={() => setFilterMode('all')}
                 className={`px-2.5 py-1 rounded-lg transition ${
                   filterMode === 'all'
-                    ? 'bg-white text-indigo-600 shadow-xs'
-                    : 'text-slate-500 hover:text-slate-700'
+                    ? 'bg-white dark:bg-slate-700 text-theme shadow-xs'
+                    : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-200'
                 }`}
               >
                 全部 ({seats.length})
@@ -202,18 +226,18 @@ export const LiveAnswerWall: React.FC<LiveAnswerWallProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center space-x-3 text-xs text-slate-500">
+          <div className="flex items-center space-x-3 text-xs text-slate-500 dark:text-slate-400">
             <span className="flex items-center space-x-1">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />
-              <span>已送出</span>
+              <span>{t('answering.hasAnswered')}</span>
             </span>
             <span className="flex items-center space-x-1">
               <span className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block" />
               <span>思考作答中</span>
             </span>
             <span className="flex items-center space-x-1">
-              <span className="w-2.5 h-2.5 rounded-full bg-slate-300 inline-block" />
-              <span>未就緒</span>
+              <span className="w-2.5 h-2.5 rounded-full bg-slate-300 dark:bg-slate-600 inline-block" />
+              <span>{t('answering.notAnswered')}</span>
             </span>
           </div>
         </div>
@@ -227,15 +251,15 @@ export const LiveAnswerWall: React.FC<LiveAnswerWallProps> = ({
                 key={seat.seatNum}
                 className={`p-3.5 rounded-2xl border transition-all duration-300 flex flex-col justify-between min-h-[96px] ${
                   hasSub
-                    ? 'bg-emerald-50/90 border-emerald-300 shadow-xs scale-[1.02]'
+                    ? 'bg-emerald-50/90 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700 shadow-xs scale-[1.02]'
                     : seat.isOnline && isAnswering
-                    ? 'bg-amber-50/70 border-amber-200 shadow-xs'
-                    : 'bg-white/70 border-slate-200/70 opacity-60'
+                    ? 'bg-amber-50/70 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 shadow-xs'
+                    : 'bg-white/70 dark:bg-slate-800/60 border-slate-200/70 dark:border-slate-700 opacity-60'
                 }`}
               >
                 {/* Seat Number & Status Indicator */}
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-extrabold font-mono text-slate-700">
+                  <span className="text-xs font-extrabold font-mono text-slate-700 dark:text-slate-300">
                     #{seat.seatNum}
                   </span>
                   {hasSub ? (
@@ -247,7 +271,10 @@ export const LiveAnswerWall: React.FC<LiveAnswerWallProps> = ({
 
                 {/* Student Name */}
                 <div className="my-1">
-                  <div className="font-bold text-xs text-slate-800 truncate" title={seat.name}>
+                  <div
+                    className="font-bold text-xs text-slate-800 dark:text-slate-200 truncate"
+                    title={seat.name}
+                  >
                     {seat.name}
                   </div>
                 </div>
@@ -255,15 +282,16 @@ export const LiveAnswerWall: React.FC<LiveAnswerWallProps> = ({
                 {/* Answer preview badge */}
                 <div className="text-[11px] font-semibold">
                   {hasSub ? (
-                    <span className="text-emerald-700 font-mono">
-                      {room.question_type === 'choice' && `已選 ${sub?.choice}`}
-                      {room.question_type === 'text' && `📝 已簡答`}
-                      {room.question_type === 'image' && `🎨 畫作已繳`}
+                    <span className="text-emerald-700 dark:text-emerald-300 font-mono">
+                      {room.question_type === 'choice' &&
+                        t('answering.studentChoice', { choice: sub?.choice || '' })}
+                      {room.question_type === 'text' && t('answering.studentText')}
+                      {room.question_type === 'image' && t('answering.studentImage')}
                     </span>
                   ) : seat.isOnline && isAnswering ? (
-                    <span className="text-amber-600">作答中...</span>
+                    <span className="text-amber-600 dark:text-amber-400">作答中...</span>
                   ) : (
-                    <span className="text-slate-400">未作答</span>
+                    <span className="text-slate-400">{t('answering.notAnswered')}</span>
                   )}
                 </div>
               </div>
@@ -275,14 +303,14 @@ export const LiveAnswerWall: React.FC<LiveAnswerWallProps> = ({
       {/* Unsubmitted Students Drawer / Modal */}
       {showUnsubmittedDrawer && (
         <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-100 space-y-4 animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between border-b pb-3">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-100 dark:border-slate-700 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b dark:border-slate-700 pb-3">
               <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center">
+                <div className="w-8 h-8 rounded-xl bg-amber-100 dark:bg-amber-900/50 text-amber-600 dark:text-amber-300 flex items-center justify-center">
                   <UserX className="w-4 h-4" />
                 </div>
                 <div>
-                  <h4 className="font-bold text-slate-800">尚未交卷學生名單</h4>
+                  <h4 className="font-bold text-slate-800 dark:text-slate-100">尚未交卷學生名單</h4>
                   <p className="text-xs text-slate-400">目前共 {unsubmittedSeats.length} 位同學尚未送出</p>
                 </div>
               </div>
@@ -304,21 +332,21 @@ export const LiveAnswerWall: React.FC<LiveAnswerWallProps> = ({
                 unsubmittedSeats.map((seat) => (
                   <div
                     key={seat.seatNum}
-                    className="flex items-center justify-between px-3 py-2 rounded-xl bg-amber-50/60 border border-amber-100 text-xs"
+                    className="flex items-center justify-between px-3 py-2 rounded-xl bg-amber-50/60 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-900 text-xs"
                   >
                     <div className="flex items-center space-x-2">
-                      <span className="font-mono font-bold text-amber-700 bg-amber-100/70 px-1.5 py-0.5 rounded">
+                      <span className="font-mono font-bold text-amber-700 dark:text-amber-300 bg-amber-100/70 dark:bg-amber-900/60 px-1.5 py-0.5 rounded">
                         #{seat.seatNum}
                       </span>
-                      <span className="font-bold text-slate-700">{seat.name}</span>
+                      <span className="font-bold text-slate-700 dark:text-slate-200">{seat.name}</span>
                     </div>
                     <div>
                       {seat.isOnline ? (
-                        <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
+                        <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950 px-2 py-0.5 rounded-full border border-emerald-100 dark:border-emerald-800">
                           🟢 連線中未送出
                         </span>
                       ) : (
-                        <span className="text-[10px] font-semibold text-slate-400 bg-slate-50 px-2 py-0.5 rounded-full border border-slate-200">
+                        <span className="text-[10px] font-semibold text-slate-400 bg-slate-50 dark:bg-slate-700 px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-600">
                           ⚪ 離線/未加入
                         </span>
                       )}
@@ -329,7 +357,7 @@ export const LiveAnswerWall: React.FC<LiveAnswerWallProps> = ({
             </div>
 
             {/* Actions */}
-            <div className="flex items-center justify-between pt-2 border-t">
+            <div className="flex items-center justify-between pt-2 border-t dark:border-slate-700">
               <button
                 onClick={() => {
                   const text = unsubmittedSeats.map((s) => `${s.seatNum}號 ${s.name}`).join('、');
@@ -337,7 +365,7 @@ export const LiveAnswerWall: React.FC<LiveAnswerWallProps> = ({
                   setCopied(true);
                   setTimeout(() => setCopied(false), 2000);
                 }}
-                className="px-3 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold transition flex items-center space-x-1.5 shadow-xs"
+                className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition flex items-center space-x-1.5 shadow-xs"
               >
                 {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
                 <span>{copied ? '已複製名單！' : '複製未交名單'}</span>
@@ -345,9 +373,9 @@ export const LiveAnswerWall: React.FC<LiveAnswerWallProps> = ({
 
               <button
                 onClick={() => setShowUnsubmittedDrawer(false)}
-                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition"
+                className="px-4 py-2 rounded-xl btn-theme-primary text-xs font-bold shadow-xs transition"
               >
-                關閉
+                {t('common.close')}
               </button>
             </div>
           </div>

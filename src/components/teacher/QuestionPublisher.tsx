@@ -1,7 +1,20 @@
-import React, { useState } from 'react';
-import { Send, Image as ImageIcon, Clock, Award, CheckCircle2, FileText, Palette, UploadCloud, X, Loader2 } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import {
+  Send,
+  Award,
+  CheckCircle2,
+  FileText,
+  Palette,
+  UploadCloud,
+  Camera,
+  FolderOpen,
+  User,
+  X,
+  Loader2,
+} from 'lucide-react';
 import { Room, QuestionType } from '../../types';
 import { uploadImageFile } from '../../lib/imageCompressor';
+import { useI18n } from '../../context/I18nContext';
 
 interface QuestionPublisherProps {
   room: Room;
@@ -23,20 +36,29 @@ export const QuestionPublisher: React.FC<QuestionPublisherProps> = ({ room, onPu
   const [uploading, setUploading] = useState(false);
   const [publishing, setPublishing] = useState(false);
 
-  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraBackInputRef = useRef<HTMLInputElement>(null);
+  const cameraFrontInputRef = useRef<HTMLInputElement>(null);
 
+  const { t } = useI18n();
+
+  const handleProcessFile = async (file: File) => {
     setUploading(true);
     try {
       const url = await uploadImageFile(file, room.id, `q${room.current_question_num}`);
       setImageUrl(url);
     } catch (err) {
       console.error('Image upload failed:', err);
-      alert('圖片上傳失敗，請重試');
+      alert('圖片上傳失敗，請重試 / Failed to upload image');
     } finally {
       setUploading(false);
     }
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleProcessFile(file);
+    e.target.value = '';
   };
 
   const handlePublish = async () => {
@@ -50,7 +72,7 @@ export const QuestionPublisher: React.FC<QuestionPublisherProps> = ({ room, onPu
         timer_seconds: seconds,
       });
     } catch (err: any) {
-      alert('發布題目失敗：' + err.message);
+      alert(t('publisher.publishFailed') + err.message);
     } finally {
       setPublishing(false);
     }
@@ -58,29 +80,73 @@ export const QuestionPublisher: React.FC<QuestionPublisherProps> = ({ room, onPu
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6">
-      <div className="glass-panel rounded-3xl p-6 sm:p-8 shadow-soft border border-white/60 space-y-6">
+      {/* Hidden file inputs for smart displays / tablets / PC */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        accept="image/*"
+        onChange={handleFileInputChange}
+        className="hidden"
+      />
+      <input
+        type="file"
+        ref={cameraBackInputRef}
+        accept="image/*"
+        capture="environment"
+        onChange={handleFileInputChange}
+        className="hidden"
+      />
+      <input
+        type="file"
+        ref={cameraFrontInputRef}
+        accept="image/*"
+        capture="user"
+        onChange={handleFileInputChange}
+        className="hidden"
+      />
+
+      <div className="glass-panel rounded-3xl p-6 sm:p-8 shadow-soft border border-white/60 dark:border-slate-700 space-y-6">
         {/* Step Header */}
-        <div className="flex items-center justify-between border-b border-slate-200/60 pb-4">
+        <div className="flex items-center justify-between border-b border-slate-200/60 dark:border-slate-700 pb-4">
           <div>
-            <span className="text-xs font-bold text-indigo-600 uppercase tracking-wider">Step 2 / 出題設定</span>
-            <h2 className="text-xl font-bold text-slate-800 mt-0.5">第 {room.current_question_num} 題設定</h2>
+            <span className="text-xs font-bold text-theme uppercase tracking-wider">
+              {t('publisher.stepTag')}
+            </span>
+            <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100 mt-0.5">
+              {t('publisher.questionTitle', { num: room.current_question_num })}
+            </h2>
           </div>
-          <div className="flex items-center space-x-1.5 px-3 py-1 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-700 text-xs font-semibold">
+          <div className="flex items-center space-x-1.5 px-3 py-1 rounded-xl badge-theme text-xs font-semibold">
             <Award className="w-4 h-4" />
-            <span>分數：{score} 分</span>
+            <span>{t('publisher.scoreLabel', { score })}</span>
           </div>
         </div>
 
         {/* 1. Question Type Selection */}
         <div>
-          <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2.5">
-            選擇題型
+          <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2.5">
+            {t('publisher.questionType')}
           </label>
           <div className="grid grid-cols-3 gap-3">
             {[
-              { type: 'choice' as QuestionType, label: '選擇題 ABCD', icon: CheckCircle2, desc: '快速按鈕自動批改' },
-              { type: 'text' as QuestionType, label: '文字簡答題', icon: FileText, desc: '學生輸入文字說明' },
-              { type: 'image' as QuestionType, label: '畫布/照片畫記', icon: Palette, desc: '畫圖標註或拍照上傳' },
+              {
+                type: 'choice' as QuestionType,
+                label: t('publisher.typeChoice'),
+                icon: CheckCircle2,
+                desc: t('publisher.typeChoiceDesc'),
+              },
+              {
+                type: 'text' as QuestionType,
+                label: t('publisher.typeText'),
+                icon: FileText,
+                desc: t('publisher.typeTextDesc'),
+              },
+              {
+                type: 'image' as QuestionType,
+                label: t('publisher.typeImage'),
+                icon: Palette,
+                desc: t('publisher.typeImageDesc'),
+              },
             ].map((item) => {
               const Icon = item.icon;
               const isSelected = qType === item.type;
@@ -91,16 +157,28 @@ export const QuestionPublisher: React.FC<QuestionPublisherProps> = ({ room, onPu
                   onClick={() => setQType(item.type)}
                   className={`p-3.5 rounded-2xl border text-left transition relative flex flex-col justify-between ${
                     isSelected
-                      ? 'bg-indigo-50/80 border-indigo-500/50 ring-2 ring-indigo-500/20 shadow-xs'
-                      : 'bg-white/80 border-slate-200/80 hover:border-slate-300'
+                      ? 'badge-theme border-current ring-2 ring-indigo-500/20 shadow-xs'
+                      : 'bg-white/80 dark:bg-slate-800/80 border-slate-200/80 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
                   }`}
                 >
-                  <Icon className={`w-5 h-5 mb-2 ${isSelected ? 'text-indigo-600' : 'text-slate-400'}`} />
+                  <Icon
+                    className={`w-5 h-5 mb-2 ${
+                      isSelected ? 'text-theme' : 'text-slate-400 dark:text-slate-500'
+                    }`}
+                  />
                   <div>
-                    <div className={`font-bold text-xs sm:text-sm ${isSelected ? 'text-indigo-900' : 'text-slate-700'}`}>
+                    <div
+                      className={`font-bold text-xs sm:text-sm ${
+                        isSelected
+                          ? 'text-theme font-extrabold'
+                          : 'text-slate-700 dark:text-slate-200'
+                      }`}
+                    >
                       {item.label}
                     </div>
-                    <div className="text-[11px] text-slate-400 mt-0.5 hidden sm:block">{item.desc}</div>
+                    <div className="text-[11px] text-slate-400 dark:text-slate-400 mt-0.5 hidden sm:block">
+                      {item.desc}
+                    </div>
                   </div>
                 </button>
               );
@@ -110,49 +188,91 @@ export const QuestionPublisher: React.FC<QuestionPublisherProps> = ({ room, onPu
 
         {/* 2. Question Prompt / Note */}
         <div>
-          <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
-            題目提示或說明（選填）
+          <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
+            {t('publisher.promptNote')}
           </label>
           <input
             type="text"
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            placeholder={`例如：請看大螢幕投影，選出正確的部首`}
-            className="w-full px-4 py-3 rounded-2xl bg-white/80 border border-slate-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none text-slate-800 font-medium transition"
+            placeholder={t('publisher.promptPlaceholder')}
+            className="w-full px-4 py-3 rounded-2xl bg-white/80 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none text-slate-800 dark:text-slate-100 font-medium transition"
           />
         </div>
 
-        {/* 3. Reference Image Upload */}
+        {/* 3. Reference Image Upload with Mobile/Tablet Camera Support */}
         <div>
-          <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
-            {qType === 'image' ? '畫布底圖 / 題目圖片（學生可在圖上作畫）' : '參考圖片（選填）'}
+          <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
+            {qType === 'image'
+              ? t('publisher.imageLabelImageMode')
+              : t('publisher.imageLabelOtherMode')}
           </label>
+
           {imageUrl ? (
-            <div className="relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 max-h-48 flex items-center justify-center">
-              <img src={imageUrl} alt="Question ref" className="max-h-48 object-contain" />
+            <div className="relative rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 max-h-52 flex items-center justify-center p-2">
+              <img
+                src={imageUrl}
+                alt="Question ref"
+                className="max-h-48 object-contain rounded-xl"
+              />
               <button
                 type="button"
                 onClick={() => setImageUrl(null)}
-                className="absolute top-2 right-2 p-1.5 rounded-full bg-slate-900/60 hover:bg-slate-900 text-white transition"
+                className="absolute top-3 right-3 p-1.5 rounded-full bg-slate-900/70 hover:bg-slate-900 text-white transition shadow-xs"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
           ) : (
-            <label className="border-2 border-dashed border-slate-200 hover:border-indigo-300 rounded-2xl p-4 flex flex-col items-center justify-center cursor-pointer bg-white/50 hover:bg-indigo-50/20 transition">
-              <input type="file" accept="image/*" onChange={handleImageChange} className="hidden" disabled={uploading} />
+            <div className="space-y-2">
               {uploading ? (
-                <div className="flex items-center space-x-2 text-indigo-600 text-xs">
+                <div className="border-2 border-dashed border-indigo-300 dark:border-indigo-700 rounded-2xl p-6 flex items-center justify-center space-x-2 text-theme text-xs font-bold bg-indigo-50/20">
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  <span>正在壓縮並上傳圖片...</span>
+                  <span>{t('publisher.uploadingImg')}</span>
                 </div>
               ) : (
-                <div className="flex items-center space-x-2 text-slate-500 text-xs font-medium">
-                  <UploadCloud className="w-5 h-5 text-indigo-500" />
-                  <span>點擊上傳圖片或拍照（JPG / PNG / WebP）</span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {/* Option 1: File picker / Album */}
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700 bg-white/70 dark:bg-slate-800/70 hover:bg-white dark:hover:bg-slate-800 hover:border-indigo-300 transition flex flex-col items-center justify-center text-center space-y-1 shadow-2xs group"
+                  >
+                    <FolderOpen className="w-5 h-5 text-theme group-hover:scale-110 transition" />
+                    <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                      {t('publisher.uploadDoc')}
+                    </span>
+                    <span className="text-[10px] text-slate-400">JPG / PNG / WebP</span>
+                  </button>
+
+                  {/* Option 2: Rear Camera / Photograph Textbook */}
+                  <button
+                    type="button"
+                    onClick={() => cameraBackInputRef.current?.click()}
+                    className="p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700 bg-white/70 dark:bg-slate-800/70 hover:bg-white dark:hover:bg-slate-800 hover:border-emerald-300 transition flex flex-col items-center justify-center text-center space-y-1 shadow-2xs group"
+                  >
+                    <Camera className="w-5 h-5 text-emerald-600 group-hover:scale-110 transition" />
+                    <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                      {t('publisher.takePhotoBack')}
+                    </span>
+                    <span className="text-[10px] text-emerald-600/80 font-medium">平板後鏡頭/相機</span>
+                  </button>
+
+                  {/* Option 3: Front Camera */}
+                  <button
+                    type="button"
+                    onClick={() => cameraFrontInputRef.current?.click()}
+                    className="p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700 bg-white/70 dark:bg-slate-800/70 hover:bg-white dark:hover:bg-slate-800 hover:border-indigo-300 transition flex flex-col items-center justify-center text-center space-y-1 shadow-2xs group"
+                  >
+                    <User className="w-5 h-5 text-slate-500 group-hover:scale-110 transition" />
+                    <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                      {t('publisher.takePhotoFront')}
+                    </span>
+                    <span className="text-[10px] text-slate-400">前置鏡頭</span>
+                  </button>
                 </div>
               )}
-            </label>
+            </div>
           )}
         </div>
 
@@ -160,8 +280,8 @@ export const QuestionPublisher: React.FC<QuestionPublisherProps> = ({ room, onPu
         <div className="grid grid-cols-2 gap-4">
           {/* Score selection */}
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
-              本題得分權重
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
+              {t('publisher.scoreWeight')}
             </label>
             <div className="flex items-center space-x-2">
               {[1, 2, 3, 5].map((pts) => (
@@ -171,11 +291,11 @@ export const QuestionPublisher: React.FC<QuestionPublisherProps> = ({ room, onPu
                   onClick={() => setScore(pts)}
                   className={`flex-1 py-2 rounded-xl text-xs font-bold transition border ${
                     score === pts
-                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                      ? 'btn-theme-primary'
+                      : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/50'
                   }`}
                 >
-                  {pts} 分
+                  {pts} {t('common.points')}
                 </button>
               ))}
             </div>
@@ -183,8 +303,8 @@ export const QuestionPublisher: React.FC<QuestionPublisherProps> = ({ room, onPu
 
           {/* Timer selection */}
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
-              作答秒數
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
+              {t('publisher.timerSeconds')}
             </label>
             <div className="flex items-center space-x-2">
               {[15, 20, 30, 60].map((s) => (
@@ -194,11 +314,11 @@ export const QuestionPublisher: React.FC<QuestionPublisherProps> = ({ room, onPu
                   onClick={() => setSeconds(s)}
                   className={`flex-1 py-2 rounded-xl text-xs font-bold transition border ${
                     seconds === s
-                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                      ? 'btn-theme-primary'
+                      : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/50'
                   }`}
                 >
-                  {s}s
+                  {s}{t('common.seconds')}
                 </button>
               ))}
             </div>
@@ -209,17 +329,17 @@ export const QuestionPublisher: React.FC<QuestionPublisherProps> = ({ room, onPu
         <button
           onClick={handlePublish}
           disabled={publishing || uploading}
-          className="w-full py-4 rounded-2xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white font-bold text-base transition shadow-glow-indigo flex items-center justify-center space-x-2 disabled:opacity-50"
+          className="w-full py-4 rounded-2xl btn-theme-primary active:scale-[0.99] font-bold text-base transition flex items-center justify-center space-x-2 disabled:opacity-50"
         >
           {publishing ? (
             <>
               <Loader2 className="w-5 h-5 animate-spin" />
-              <span>正在推送到全班學生端...</span>
+              <span>{t('publisher.publishingBtn')}</span>
             </>
           ) : (
             <>
               <Send className="w-5 h-5" />
-              <span>發布題目（推送到學生端）</span>
+              <span>{t('publisher.publishBtn')}</span>
             </>
           )}
         </button>
