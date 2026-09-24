@@ -14,6 +14,7 @@ import { useI18n } from '../../context/I18nContext';
 
 interface StudentJoinProps {
   initialRoomId?: string;
+  onTeacherLoginClick?: () => void;
   onJoined: (studentInfo: {
     roomId: string;
     studentId: string;
@@ -23,7 +24,11 @@ interface StudentJoinProps {
   }) => void;
 }
 
-export const StudentJoin: React.FC<StudentJoinProps> = ({ initialRoomId = '', onJoined }) => {
+export const StudentJoin: React.FC<StudentJoinProps> = ({
+  initialRoomId = '',
+  onTeacherLoginClick,
+  onJoined,
+}) => {
   const [entryMode, setEntryMode] = useState<'wutai' | 'ligu' | 'manual'>(
     initialRoomId ? 'manual' : 'wutai'
   );
@@ -493,6 +498,19 @@ export const StudentJoin: React.FC<StudentJoinProps> = ({ initialRoomId = '', on
             </>
           )}
         </button>
+
+        {/* Subtle Teacher Entrance for Unverified Devices */}
+        {onTeacherLoginClick && (
+          <div className="pt-2 text-center">
+            <button
+              type="button"
+              onClick={onTeacherLoginClick}
+              className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition underline decoration-dotted"
+            >
+              我是授課教師？登入教師主控台
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

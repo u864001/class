@@ -9,8 +9,35 @@ import { isTeacherAuthorized } from './lib/rosterApi';
 import { useTheme } from './context/ThemeContext';
 
 export const App: React.FC = () => {
-  const [role, setRole] = useState<'teacher' | 'student'>('teacher');
-  const [isStudentLocked, setIsStudentLocked] = useState(false);
+  // Synchronous initial role determination:
+  // ONLY authorized teacher devices open directly in teacher mode.
+  // ALL unverified devices (student devices, direct root URL) open safely in student mode!
+  const [role, setRole] = useState<'teacher' | 'student'>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const roomParam = params.get('room');
+      const roleParam = params.get('role');
+      if (roleParam === 'student' || roomParam) return 'student';
+      if (roleParam === 'teacher' && isTeacherAuthorized()) return 'teacher';
+      return isTeacherAuthorized() ? 'teacher' : 'student';
+    } catch {
+      return 'student';
+    }
+  });
+
+  // Strict student lock: hides role switcher from unverified devices on the root URL
+  const [isStudentLocked, setIsStudentLocked] = useState<boolean>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const roomParam = params.get('room');
+      const roleParam = params.get('role');
+      if (roleParam === 'student' || roomParam) return true;
+      return !isTeacherAuthorized();
+    } catch {
+      return true;
+    }
+  });
+
   const [showTeacherAuthModal, setShowTeacherAuthModal] = useState(false);
   const [studentSession, setStudentSession] = useState<{
     roomId: string;
@@ -29,8 +56,6 @@ export const App: React.FC = () => {
     const roleParam = params.get('role');
 
     if (roleParam === 'student' || roomParam) {
-      // Direct student entrance via QR Code / Shared Link:
-      // Completely locks student view and hides all teacher toggle controls
       setRole('student');
       setIsStudentLocked(true);
     } else if (roleParam === 'teacher') {
@@ -39,19 +64,16 @@ export const App: React.FC = () => {
         setIsStudentLocked(false);
       } else {
         setRole('student');
-        setIsStudentLocked(false);
+        setIsStudentLocked(true);
         setShowTeacherAuthModal(true);
       }
     } else {
-      // Default entrance without query params:
-      // If this device was already verified as teacher, land on teacher view.
-      // Otherwise, default safely to student mode (with PIN guard to switch).
       if (isTeacherAuthorized()) {
         setRole('teacher');
         setIsStudentLocked(false);
       } else {
         setRole('student');
-        setIsStudentLocked(false);
+        setIsStudentLocked(true);
       }
     }
   }, []);
@@ -115,6 +137,7 @@ export const App: React.FC = () => {
         ) : !studentSession ? (
           <StudentJoin
             initialRoomId={queryRoom}
+            onTeacherLoginClick={() => setShowTeacherAuthModal(true)}
             onJoined={(session) => setStudentSession(session)}
           />
         ) : studentSession.isHomework ? (

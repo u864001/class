@@ -71,7 +71,7 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
                 setPin(e.target.value);
                 if (error) setError(false);
               }}
-              placeholder="請輸入教師碼 (預設: 8888)"
+              placeholder="請輸入教師通行碼..."
               className={`w-full px-4 py-3 rounded-2xl border text-center font-mono font-bold tracking-widest text-slate-800 dark:text-slate-100 dark:bg-slate-800 outline-none transition text-base ${
                 error
                   ? 'border-rose-400 bg-rose-50/50 dark:bg-rose-950/30 ring-2 ring-rose-200'
@@ -116,7 +116,7 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
           </div>
 
           <div className="text-[11px] text-slate-400 dark:text-slate-500 pt-1">
-            💡 預設教師碼為 <span className="font-mono font-bold text-slate-600 dark:text-slate-300">8888</span>（或使用校務管理密碼）
+            如忘記通行碼，請洽詢校務管理員或輸入學校系統管理密碼
           </div>
         </form>
       </div>
