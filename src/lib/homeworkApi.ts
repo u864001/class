@@ -287,19 +287,31 @@ export async function unlockStudentHomework(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const cleanRoomId = roomId.trim().toUpperCase();
-    const targetRoundIds = [LOCK_ROUND_ID];
-    if (assignmentId) {
-      targetRoundIds.push(`${assignmentId}_LOCK`);
+
+    // 1. Try secure teacher unlock RPC
+    const { error: rpcErr } = await supabase.rpc('teacher_unlock_student', {
+      p_room_id: cleanRoomId,
+      p_student_id: studentId,
+      p_assignment_id: assignmentId || null,
+    });
+
+    // 2. Fallback to direct delete if RPC is not yet installed in Supabase
+    if (rpcErr) {
+      const targetRoundIds = [LOCK_ROUND_ID];
+      if (assignmentId) {
+        targetRoundIds.push(`${assignmentId}_LOCK`);
+      }
+
+      const { error } = await supabase
+        .from('submissions')
+        .delete()
+        .eq('room_id', cleanRoomId)
+        .in('round_id', targetRoundIds)
+        .eq('student_id', studentId);
+
+      if (error) throw error;
     }
 
-    const { error } = await supabase
-      .from('submissions')
-      .delete()
-      .eq('room_id', cleanRoomId)
-      .in('round_id', targetRoundIds)
-      .eq('student_id', studentId);
-
-    if (error) throw error;
     return { success: true };
   } catch (err: any) {
     console.error('Unlock student error:', err);
@@ -527,21 +539,8 @@ export async function cleanRoomAllAssetsAndSubmissions(
       console.warn('Storage cleanup warning:', storageErr);
     }
 
-    // 2. 刪除 submissions
-    const { error: subErr } = await supabase
-      .from('submissions')
-      .delete()
-      .eq('room_id', cleanId);
-    if (subErr) console.warn('Submissions delete notice:', subErr.message);
-
-    // 3. 刪除 room_students
-    const { error: stuErr } = await supabase
-      .from('room_students')
-      .delete()
-      .eq('room_id', cleanId);
-    if (stuErr) console.warn('Room students delete notice:', stuErr.message);
-
-    // 4. 重設 rooms 表
+    // 1. 先將 rooms 表狀態重置為 'homework_prep' 並清空題目
+    // 此舉能立即終止任何學生作答，並讓資料庫 Trigger 識別目前為房間重置模式，允許批次刪除
     const { error: roomErr } = await supabase
       .from('rooms')
       .update({
@@ -556,6 +555,27 @@ export async function cleanRoomAllAssetsAndSubmissions(
       .eq('id', cleanId);
 
     if (roomErr) throw roomErr;
+
+    // 2. 先刪除所有鎖定紀錄
+    await supabase
+      .from('submissions')
+      .delete()
+      .eq('room_id', cleanId)
+      .or(`round_id.eq.${LOCK_ROUND_ID},round_id.like.%_LOCK`);
+
+    // 3. 刪除所有作答明細
+    const { error: subErr } = await supabase
+      .from('submissions')
+      .delete()
+      .eq('room_id', cleanId);
+    if (subErr) console.warn('Submissions delete notice:', subErr.message);
+
+    // 4. 刪除 room_students 在線狀態
+    const { error: stuErr } = await supabase
+      .from('room_students')
+      .delete()
+      .eq('room_id', cleanId);
+    if (stuErr) console.warn('Room students delete notice:', stuErr.message);
 
     return { success: true };
   } catch (err: any) {

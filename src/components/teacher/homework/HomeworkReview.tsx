@@ -213,13 +213,22 @@ export const HomeworkReview: React.FC<HomeworkReviewProps> = ({
   // Current selected question
   const currentQ = questions[selectedQIdx];
 
-  // Inline score award for a submission
+  // Inline score award for a submission (uses secure RPC with fallback)
   const handleAwardScore = async (submissionId: string, earnedScore: number) => {
     try {
-      await supabase
-        .from('submissions')
-        .update({ earned_score: earnedScore })
-        .eq('id', submissionId);
+      // 1. Try secure teacher grading RPC
+      const { error: rpcErr } = await supabase.rpc('award_submission_score', {
+        p_submission_id: submissionId,
+        p_score: earnedScore,
+      });
+
+      // 2. Fallback to direct update if RPC is not yet installed in Supabase
+      if (rpcErr) {
+        await supabase
+          .from('submissions')
+          .update({ earned_score: earnedScore })
+          .eq('id', submissionId);
+      }
 
       setSubmissions((prev) =>
         prev.map((s) => (s.id === submissionId ? { ...s, earned_score: earnedScore } : s))
