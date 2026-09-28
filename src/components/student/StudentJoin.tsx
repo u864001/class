@@ -7,8 +7,12 @@ import {
   parseHomework,
   WUTAI_PRESETS,
   LIGU_PRESETS,
-  fetchActiveHomeworkMap,
+  FIXED_ROOM_PRESETS,
+  fetchActiveHomeworkSummary,
+  ActiveHomeworkSummary,
+  ActiveHomeworkItem,
   FixedRoomPreset,
+  parseRoomCode,
 } from '../../lib/homeworkApi';
 import { useI18n } from '../../context/I18nContext';
 import { maskStudentName, generateIndigenousNickname } from '../../lib/nicknameGenerator';
@@ -30,7 +34,7 @@ export const StudentJoin: React.FC<StudentJoinProps> = ({
   onTeacherLoginClick,
   onJoined,
 }) => {
-  const [entryMode, setEntryMode] = useState<'wutai' | 'ligu' | 'manual'>(
+  const [entryMode, setEntryMode] = useState<'wutai' | 'ligu' | 'custom' | 'manual'>(
     initialRoomId ? 'manual' : 'wutai'
   );
   const [roomId, setRoomId] = useState(initialRoomId.toUpperCase());
@@ -41,9 +45,14 @@ export const StudentJoin: React.FC<StudentJoinProps> = ({
   const [selectedSeat, setSelectedSeat] = useState('1');
   const [nickname, setNickname] = useState(() => generateIndigenousNickname());
 
-  // Active Homework Map across all 12 classes: { WT0601: { title, count }, ... }
+  // Active Homework Summary across all classes, subjects & custom rooms
+  const [activeSummary, setActiveSummary] = useState<ActiveHomeworkSummary>({
+    byClass: {},
+    byRoomId: {},
+    customRooms: [],
+  });
   const [activeHwMap, setActiveHwMap] = useState<Record<string, { title: string; count: number }>>({});
-  const [selectedPresetCode, setSelectedPresetCode] = useState<string>('');
+  const [selectedPresetCode, setSelectedPresetCode] = useState<string>('WT0601');
 
   // Remembered student identity from localStorage
   const [lastStudent, setLastStudent] = useState<{
@@ -58,7 +67,45 @@ export const StudentJoin: React.FC<StudentJoinProps> = ({
 
   // Load active homework status & remembered student on mount
   useEffect(() => {
-    fetchActiveHomeworkMap().then((map) => setActiveHwMap(map));
+    fetchActiveHomeworkSummary().then((summary) => {
+      setActiveSummary(summary);
+      const map: Record<string, { title: string; count: number }> = {};
+      Object.values(summary.byRoomId).forEach((it) => {
+        map[it.roomId] = { title: it.title, count: it.count };
+      });
+      Object.entries(summary.byClass).forEach(([baseCode, items]) => {
+        if (items.length > 0) {
+          const names = items.map((i) => i.subjectName).join('、');
+          map[baseCode] = {
+            title: `${names}等 ${items.length} 份作業`,
+            count: items.reduce((acc, it) => acc + it.count, 0),
+          };
+        }
+      });
+      setActiveHwMap(map);
+
+      // Auto-focus class with active homework if initialRoomId is not provided
+      if (!initialRoomId) {
+        const firstActivePreset = FIXED_ROOM_PRESETS.find(
+          (p) => summary.byClass[p.code]?.length > 0
+        );
+        if (firstActivePreset) {
+          if (firstActivePreset.campus === 'wutai') {
+            setEntryMode('wutai');
+          } else if (firstActivePreset.campus === 'ligu') {
+            setEntryMode('ligu');
+          }
+          setSelectedPresetCode(firstActivePreset.code);
+          setSelectedClass(firstActivePreset.classKey);
+          const firstSub = summary.byClass[firstActivePreset.code][0];
+          setRoomId(firstSub.roomId);
+        } else if (!roomId) {
+          setSelectedPresetCode('WT0601');
+          setSelectedClass('6-1');
+          setRoomId('WT0601CH');
+        }
+      }
+    });
 
     try {
       const raw = localStorage.getItem('classqna_last_student');
@@ -71,13 +118,21 @@ export const StudentJoin: React.FC<StudentJoinProps> = ({
     } catch (e) {
       console.warn('Failed to load remembered student:', e);
     }
-  }, []);
+  }, [initialRoomId]);
 
   // When a preset class is clicked
-  const handleSelectPresetClass = async (preset: FixedRoomPreset) => {
+  const handleSelectPresetClass = (preset: FixedRoomPreset) => {
     setSelectedPresetCode(preset.code);
-    setRoomId(preset.code);
     setSelectedClass(preset.classKey);
+
+    const activeSubs = activeSummary.byClass[preset.code] || [];
+    if (activeSubs.length > 0) {
+      // Pick first active subject
+      setRoomId(activeSubs[0].roomId);
+    } else {
+      // Default to CH (Chinese)
+      setRoomId(`${preset.code}CH`);
+    }
   };
 
   // Fetch room details whenever roomId changes
@@ -199,6 +254,9 @@ export const StudentJoin: React.FC<StudentJoinProps> = ({
     });
   };
 
+  const currentSelectedPreset = FIXED_ROOM_PRESETS.find((p) => p.code === selectedPresetCode);
+  const currentParsedRoom = parseRoomCode(roomId);
+
   return (
     <div className="max-w-lg mx-auto px-3 sm:px-4 py-6 sm:py-12 space-y-4">
       {/* Returning Student Quick Login Banner */}
@@ -255,20 +313,20 @@ export const StudentJoin: React.FC<StudentJoinProps> = ({
         </div>
 
         {/* Campus Tabs */}
-        <div className="flex rounded-2xl bg-slate-100 dark:bg-slate-800 p-1 border border-slate-200/80 dark:border-slate-700">
+        <div className="flex rounded-2xl bg-slate-100 dark:bg-slate-800 p-1 border border-slate-200/80 dark:border-slate-700 text-xs font-bold">
           <button
             type="button"
             onClick={() => {
               setEntryMode('wutai');
               handleSelectPresetClass(WUTAI_PRESETS[5]); // default 六甲
             }}
-            className={`flex-1 py-2 rounded-xl font-bold text-xs transition ${
+            className={`flex-1 py-2 rounded-xl transition ${
               entryMode === 'wutai'
                 ? 'bg-white dark:bg-slate-700 text-theme shadow-xs'
                 : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
-            霧臺校區 (甲班)
+            霧臺 (甲班)
           </button>
           <button
             type="button"
@@ -276,13 +334,33 @@ export const StudentJoin: React.FC<StudentJoinProps> = ({
               setEntryMode('ligu');
               handleSelectPresetClass(LIGU_PRESETS[4]); // default 五乙
             }}
-            className={`flex-1 py-2 rounded-xl font-bold text-xs transition ${
+            className={`flex-1 py-2 rounded-xl transition ${
               entryMode === 'ligu'
                 ? 'bg-white dark:bg-slate-700 text-theme shadow-xs'
                 : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
-            勵古校區 (乙班)
+            勵古 (乙班)
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setEntryMode('custom');
+              setSelectedPresetCode('');
+              if (activeSummary.customRooms.length > 0) {
+                setRoomId(activeSummary.customRooms[0].roomId);
+              }
+            }}
+            className={`flex-1 py-2 rounded-xl transition flex items-center justify-center space-x-1 ${
+              entryMode === 'custom'
+                ? 'bg-white dark:bg-slate-700 text-theme shadow-xs'
+                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+            }`}
+          >
+            <span>社團/跨班</span>
+            {activeSummary.customRooms.length > 0 && (
+              <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
+            )}
           </button>
           <button
             type="button"
@@ -290,7 +368,7 @@ export const StudentJoin: React.FC<StudentJoinProps> = ({
               setEntryMode('manual');
               setSelectedPresetCode('');
             }}
-            className={`flex-1 py-2 rounded-xl font-bold text-xs transition ${
+            className={`flex-1 py-2 rounded-xl transition ${
               entryMode === 'manual'
                 ? 'bg-white dark:bg-slate-700 text-theme shadow-xs'
                 : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
@@ -300,31 +378,31 @@ export const StudentJoin: React.FC<StudentJoinProps> = ({
           </button>
         </div>
 
-        {/* Preset Class Grid for Wutai / Ligu */}
+        {/* Preset Class Grid for Wutai */}
         {entryMode === 'wutai' && (
-          <div className="space-y-2">
+          <div className="space-y-3">
             <span className="text-[11px] font-bold text-slate-400 block px-1">
-              點擊您的班級 (亮綠標者代表有進行中的回家作業)：
+              點擊您的班級 (綠標為有作業，點選後於下方挑選科目)：
             </span>
             <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
               {WUTAI_PRESETS.map((p) => {
-                const isSelected = selectedPresetCode === p.code || roomId === p.code;
-                const activeHw = activeHwMap[p.code];
+                const isSelected = selectedPresetCode === p.code;
+                const classHws = activeSummary.byClass[p.code] || [];
                 return (
                   <button
                     key={p.code}
                     type="button"
                     onClick={() => handleSelectPresetClass(p)}
-                    className={`relative p-2.5 rounded-2xl border text-center transition ${
+                    className={`relative p-2 rounded-2xl border text-center transition ${
                       isSelected
                         ? 'badge-theme border-current shadow-xs font-black scale-105'
                         : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-300'
                     }`}
                   >
                     <span className="block text-xs font-black">{p.shortLabel}</span>
-                    {activeHw ? (
+                    {classHws.length > 0 ? (
                       <span className="inline-block mt-1 px-1.5 py-0.5 rounded-full bg-emerald-500 text-white text-[9px] font-black animate-pulse">
-                        有作業
+                        {classHws.length}科作業
                       </span>
                     ) : (
                       <span className="text-[10px] text-slate-400 block mt-1">無作業</span>
@@ -333,33 +411,97 @@ export const StudentJoin: React.FC<StudentJoinProps> = ({
                 );
               })}
             </div>
+
+            {/* Subject Selector Drawer for Selected Class */}
+            {selectedPresetCode && (
+              <div className="p-3 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-200/80 dark:border-indigo-800/60 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-1.5">
+                    <span className="font-bold text-xs text-indigo-950 dark:text-indigo-200">
+                      📚 {currentSelectedPreset?.shortLabel} 作業科目：
+                    </span>
+                    {activeSummary.byClass[selectedPresetCode]?.length > 0 && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500 text-white font-bold animate-pulse">
+                        {activeSummary.byClass[selectedPresetCode].length} 科開放作答
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-medium">點選科目進入</span>
+                </div>
+
+                {activeSummary.byClass[selectedPresetCode]?.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {activeSummary.byClass[selectedPresetCode].map((item) => {
+                      const isRoomSelected = roomId === item.roomId;
+                      return (
+                        <button
+                          key={item.roomId}
+                          type="button"
+                          onClick={() => setRoomId(item.roomId)}
+                          className={`p-2.5 rounded-xl border text-left transition flex items-center justify-between ${
+                            isRoomSelected
+                              ? 'bg-white dark:bg-slate-800 border-indigo-600 shadow-sm ring-2 ring-indigo-500'
+                              : 'bg-white/80 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 hover:border-indigo-300'
+                          }`}
+                        >
+                          <div className="flex items-center space-x-2 min-w-0">
+                            <span className="text-xl flex-shrink-0">{item.subjectIcon}</span>
+                            <div className="truncate">
+                              <div className="flex items-center space-x-1.5">
+                                <span className="text-xs font-black text-slate-800 dark:text-slate-100">
+                                  {item.subjectName}
+                                </span>
+                                <span className="text-[10px] font-mono text-slate-400">
+                                  {item.roomId}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                                {item.title}
+                              </p>
+                            </div>
+                          </div>
+                          <span className="text-xs font-black text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full flex-shrink-0 ml-1.5 border border-emerald-200 dark:border-emerald-800">
+                            {item.count} 題
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="py-2.5 px-3 rounded-xl bg-white/70 dark:bg-slate-800/70 border border-slate-200/60 dark:border-slate-700 text-xs text-slate-400 text-center">
+                    目前 {currentSelectedPreset?.shortLabel} 尚無進行中的回家作業
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
+        {/* Preset Class Grid for Ligu */}
         {entryMode === 'ligu' && (
-          <div className="space-y-2">
+          <div className="space-y-3">
             <span className="text-[11px] font-bold text-slate-400 block px-1">
-              點擊您的班級 (亮綠標者代表有進行中的回家作業)：
+              點擊您的班級 (綠標為有作業，點選後於下方挑選科目)：
             </span>
             <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
               {LIGU_PRESETS.map((p) => {
-                const isSelected = selectedPresetCode === p.code || roomId === p.code;
-                const activeHw = activeHwMap[p.code];
+                const isSelected = selectedPresetCode === p.code;
+                const classHws = activeSummary.byClass[p.code] || [];
                 return (
                   <button
                     key={p.code}
                     type="button"
                     onClick={() => handleSelectPresetClass(p)}
-                    className={`relative p-2.5 rounded-2xl border text-center transition ${
+                    className={`relative p-2 rounded-2xl border text-center transition ${
                       isSelected
                         ? 'badge-theme border-current shadow-xs font-black scale-105'
                         : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-300'
                     }`}
                   >
                     <span className="block text-xs font-black">{p.shortLabel}</span>
-                    {activeHw ? (
+                    {classHws.length > 0 ? (
                       <span className="inline-block mt-1 px-1.5 py-0.5 rounded-full bg-emerald-500 text-white text-[9px] font-black animate-pulse">
-                        有作業
+                        {classHws.length}科作業
                       </span>
                     ) : (
                       <span className="text-[10px] text-slate-400 block mt-1">無作業</span>
@@ -368,6 +510,122 @@ export const StudentJoin: React.FC<StudentJoinProps> = ({
                 );
               })}
             </div>
+
+            {/* Subject Selector Drawer for Selected Class */}
+            {selectedPresetCode && (
+              <div className="p-3 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-200/80 dark:border-indigo-800/60 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-1.5">
+                    <span className="font-bold text-xs text-indigo-950 dark:text-indigo-200">
+                      📚 {currentSelectedPreset?.shortLabel} 作業科目：
+                    </span>
+                    {activeSummary.byClass[selectedPresetCode]?.length > 0 && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500 text-white font-bold animate-pulse">
+                        {activeSummary.byClass[selectedPresetCode].length} 科開放作答
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-medium">點選科目進入</span>
+                </div>
+
+                {activeSummary.byClass[selectedPresetCode]?.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {activeSummary.byClass[selectedPresetCode].map((item) => {
+                      const isRoomSelected = roomId === item.roomId;
+                      return (
+                        <button
+                          key={item.roomId}
+                          type="button"
+                          onClick={() => setRoomId(item.roomId)}
+                          className={`p-2.5 rounded-xl border text-left transition flex items-center justify-between ${
+                            isRoomSelected
+                              ? 'bg-white dark:bg-slate-800 border-indigo-600 shadow-sm ring-2 ring-indigo-500'
+                              : 'bg-white/80 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 hover:border-indigo-300'
+                          }`}
+                        >
+                          <div className="flex items-center space-x-2 min-w-0">
+                            <span className="text-xl flex-shrink-0">{item.subjectIcon}</span>
+                            <div className="truncate">
+                              <div className="flex items-center space-x-1.5">
+                                <span className="text-xs font-black text-slate-800 dark:text-slate-100">
+                                  {item.subjectName}
+                                </span>
+                                <span className="text-[10px] font-mono text-slate-400">
+                                  {item.roomId}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                                {item.title}
+                              </p>
+                            </div>
+                          </div>
+                          <span className="text-xs font-black text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full flex-shrink-0 ml-1.5 border border-emerald-200 dark:border-emerald-800">
+                            {item.count} 題
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="py-2.5 px-3 rounded-xl bg-white/70 dark:bg-slate-800/70 border border-slate-200/60 dark:border-slate-700 text-xs text-slate-400 text-center">
+                    目前 {currentSelectedPreset?.shortLabel} 尚無進行中的回家作業
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Custom / Mixed-Grade Clubs Section */}
+        {entryMode === 'custom' && (
+          <div className="space-y-2.5">
+            <span className="text-[11px] font-bold text-slate-400 block px-1">
+              進行中的社團或跨班/課後班作業：
+            </span>
+            {activeSummary.customRooms.length > 0 ? (
+              <div className="space-y-2">
+                {activeSummary.customRooms.map((cr) => {
+                  const isSelected = roomId === cr.roomId;
+                  return (
+                    <button
+                      key={cr.roomId}
+                      type="button"
+                      onClick={() => setRoomId(cr.roomId)}
+                      className={`w-full p-3.5 rounded-2xl border text-left transition flex items-center justify-between ${
+                        isSelected
+                          ? 'bg-white dark:bg-slate-800 border-indigo-600 shadow-sm ring-2 ring-indigo-500'
+                          : 'bg-white/80 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 hover:border-indigo-300'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-3">
+                        <span className="text-2xl">{cr.subjectIcon}</span>
+                        <div>
+                          <div className="flex items-center space-x-2">
+                            <span className="font-mono font-black text-xs text-theme bg-white dark:bg-slate-700 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-600">
+                              {cr.roomId}
+                            </span>
+                            <span className="font-bold text-xs text-slate-700 dark:text-slate-200">
+                              {cr.teacherName ? `${cr.teacherName}` : '任課老師'}
+                            </span>
+                          </div>
+                          <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100 mt-1">
+                            {cr.title}
+                          </h4>
+                        </div>
+                      </div>
+                      <span className="text-xs font-black text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-1 rounded-full border border-emerald-200 dark:border-emerald-800">
+                        {cr.count} 題
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="py-8 text-center bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-1">
+                <p className="text-xs text-slate-500 font-bold">目前尚無進行中的社團或跨班作業</p>
+                <p className="text-[11px] text-slate-400">若有任課老師提供專屬代碼，請點擊上方「輸入代碼」直接進入</p>
+              </div>
+            )}
           </div>
         )}
 
@@ -405,7 +663,7 @@ export const StudentJoin: React.FC<StudentJoinProps> = ({
           <div className="p-4 rounded-2xl bg-slate-50/80 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700 space-y-3">
             <div className="flex items-center justify-between text-xs">
               <span className="text-slate-800 dark:text-slate-200 font-bold">
-                🏫 {room.teacher_name} 的{room.status.startsWith('homework_') ? '回家作業' : '課堂'}
+                🏫 {currentParsedRoom.isFixed ? currentParsedRoom.displayLabel : `${room.teacher_name} 的課堂/作業 (${roomId})`}
               </span>
               <span className="text-theme font-semibold">
                 {room.status.startsWith('homework_')
@@ -419,8 +677,13 @@ export const StudentJoin: React.FC<StudentJoinProps> = ({
             {/* Roster Mode: Pick Class & Seat/Name */}
             {!room.custom_class_enabled && room.selected_classes?.length > 0 ? (
               <div className="space-y-2">
-                <div className="text-xs text-slate-600 dark:text-slate-300 font-semibold">
-                  點選您的座號與姓名：
+                <div className="text-xs text-slate-600 dark:text-slate-300 font-semibold flex items-center justify-between">
+                  <span>點選您的座號與姓名：</span>
+                  {room.selected_classes.length > 1 && (
+                    <span className="text-[10px] text-theme font-bold bg-theme/10 px-2 py-0.5 rounded-md">
+                      跨班 / 混齡名單 ({room.selected_classes.length} 班)
+                    </span>
+                  )}
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <select

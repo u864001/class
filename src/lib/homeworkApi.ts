@@ -141,6 +141,80 @@ export const FIXED_ROOM_PRESETS: FixedRoomPreset[] = [
 export const WUTAI_PRESETS = FIXED_ROOM_PRESETS.filter((p) => p.campus === 'wutai');
 export const LIGU_PRESETS = FIXED_ROOM_PRESETS.filter((p) => p.campus === 'ligu');
 
+export interface SubjectPreset {
+  code: string; // 'CH', 'MA', 'SC', 'SS', 'EN', 'LF', 'OT'
+  name: string; // '國語', '數學', '自然', '社會', '英語', '生活', '其他'
+  fullName: string;
+  icon: string;
+  color: string;
+  grades?: string[]; // e.g. LF is ['1', '2'], SC & SS are ['3', '4', '5', '6']
+}
+
+export const SUBJECT_PRESETS: SubjectPreset[] = [
+  { code: 'CH', name: '國語', fullName: '國語文', icon: '📘', color: '#3b82f6' },
+  { code: 'MA', name: '數學', fullName: '數學科', icon: '📐', color: '#10b981' },
+  { code: 'EN', name: '英語', fullName: '英語文', icon: '🔤', color: '#8b5cf6' },
+  { code: 'SC', name: '自然', fullName: '自然科學', icon: '🔬', color: '#06b6d4', grades: ['3', '4', '5', '6'] },
+  { code: 'SS', name: '社會', fullName: '社會科', icon: '🌍', color: '#f59e0b', grades: ['3', '4', '5', '6'] },
+  { code: 'LF', name: '生活', fullName: '生活課程', icon: '🌱', color: '#84cc16', grades: ['1', '2'] },
+  { code: 'OT', name: '其他', fullName: '彈性/藝體/其他', icon: '🎨', color: '#ec4899' },
+];
+
+export function getSubjectsForGrade(grade?: string): SubjectPreset[] {
+  if (!grade) return SUBJECT_PRESETS;
+  return SUBJECT_PRESETS.filter((s) => !s.grades || s.grades.includes(grade));
+}
+
+export interface ParsedRoomCode {
+  isFixed: boolean;
+  baseClassCode: string;
+  subjectCode?: string;
+  subject?: SubjectPreset;
+  preset?: FixedRoomPreset;
+  displayLabel: string;
+  shortLabel: string;
+}
+
+export function parseRoomCode(rawRoomId: string): ParsedRoomCode {
+  const clean = (rawRoomId || '').trim().toUpperCase();
+  const match = clean.match(/^(WT|LG)(\d{2})(\d{2})([A-Z]{2})?$/);
+
+  if (match) {
+    const baseCode = clean.slice(0, 6);
+    const subCode = clean.length > 6 ? clean.slice(6) : undefined;
+    const preset = FIXED_ROOM_PRESETS.find((p) => p.code === baseCode);
+    const subject = SUBJECT_PRESETS.find((s) => s.code === subCode);
+
+    let displayLabel = clean;
+    let shortLabel = clean;
+
+    if (preset && subject) {
+      displayLabel = `${preset.campusName} ${preset.grade}年${preset.className === '1' ? '甲' : '乙'}班 - ${subject.name} (${clean})`;
+      shortLabel = `${preset.shortLabel} ${subject.name}`;
+    } else if (preset) {
+      displayLabel = `${preset.fullLabel} (${clean})`;
+      shortLabel = preset.shortLabel;
+    }
+
+    return {
+      isFixed: true,
+      baseClassCode: baseCode,
+      subjectCode: subCode,
+      subject,
+      preset,
+      displayLabel,
+      shortLabel,
+    };
+  }
+
+  return {
+    isFixed: false,
+    baseClassCode: clean,
+    displayLabel: clean,
+    shortLabel: clean,
+  };
+}
+
 /**
 /**
  * 序列化作業題目為 JSON 字串存入 rooms 表之 question_note
@@ -433,38 +507,101 @@ export async function uploadStudentHomeworkImage(
   return `${publicData.publicUrl}?t=${Date.now()}`;
 }
 
+export interface ActiveHomeworkItem {
+  roomId: string;
+  baseClassCode: string;
+  subjectCode?: string;
+  subjectName: string;
+  subjectIcon: string;
+  title: string;
+  count: number;
+  teacherName?: string;
+}
+
+export interface ActiveHomeworkSummary {
+  byClass: Record<string, ActiveHomeworkItem[]>;
+  byRoomId: Record<string, ActiveHomeworkItem>;
+  customRooms: ActiveHomeworkItem[];
+}
+
+/**
+ * 查詢所有目前進行中的回家作業 (status = 'homework_active')
+ * 自動依班級與科目歸納，支援 WT0601CH 等後綴代碼以及自訂教室
+ */
+export async function fetchActiveHomeworkSummary(): Promise<ActiveHomeworkSummary> {
+  try {
+    const { data, error } = await supabase
+      .from('rooms')
+      .select('id, status, question_note, teacher_name')
+      .eq('status', 'homework_active');
+
+    if (error || !data) return { byClass: {}, byRoomId: {}, customRooms: [] };
+
+    const byClass: Record<string, ActiveHomeworkItem[]> = {};
+    const byRoomId: Record<string, ActiveHomeworkItem> = {};
+    const customRooms: ActiveHomeworkItem[] = [];
+
+    for (const r of data) {
+      const hw = parseHomework(r.question_note);
+      if (!hw) continue;
+
+      const parsed = parseRoomCode(r.id);
+      const item: ActiveHomeworkItem = {
+        roomId: r.id,
+        baseClassCode: parsed.baseClassCode,
+        subjectCode: parsed.subjectCode,
+        subjectName: parsed.subject?.name || (parsed.isFixed ? '作業' : '自訂專案'),
+        subjectIcon: parsed.subject?.icon || '📚',
+        title: hw.title,
+        count: hw.questions.length,
+        teacherName: r.teacher_name,
+      };
+
+      byRoomId[r.id] = item;
+
+      if (parsed.isFixed) {
+        if (!byClass[parsed.baseClassCode]) {
+          byClass[parsed.baseClassCode] = [];
+        }
+        byClass[parsed.baseClassCode].push(item);
+      } else {
+        customRooms.push(item);
+      }
+    }
+
+    return { byClass, byRoomId, customRooms };
+  } catch (err) {
+    console.warn('fetchActiveHomeworkSummary error:', err);
+    return { byClass: {}, byRoomId: {}, customRooms: [] };
+  }
+}
+
 /**
  * 批次查詢哪些班級目前有進行中的回家作業 (status = 'homework_active')
- * 回傳 map: { WT0601: { title: "自然第3單元", questionCount: 3 }, ... }
+ * 回傳 map: { WT0601: { title: "國語等作業", count: 3 }, WT0601CH: ... }
  */
 export async function fetchActiveHomeworkMap(
   codes?: string[]
 ): Promise<Record<string, { title: string; count: number }>> {
-  try {
-    const codesToQuery = codes || FIXED_ROOM_PRESETS.map((p) => p.code);
-    const { data, error } = await supabase
-      .from('rooms')
-      .select('id, status, question_note')
-      .in('id', codesToQuery)
-      .eq('status', 'homework_active');
+  const summary = await fetchActiveHomeworkSummary();
+  const map: Record<string, { title: string; count: number }> = {};
 
-    if (error || !data) return {};
+  Object.values(summary.byRoomId).forEach((it) => {
+    map[it.roomId] = { title: it.title, count: it.count };
+  });
 
-    const result: Record<string, { title: string; count: number }> = {};
-    for (const r of data) {
-      const hw = parseHomework(r.question_note);
-      if (hw) {
-        result[r.id] = {
-          title: hw.title,
-          count: hw.questions.length,
-        };
-      }
+  // Also provide summary for base class code (e.g. WT0601) if any subject has homework
+  Object.entries(summary.byClass).forEach(([baseCode, items]) => {
+    if (items.length > 0 && !map[baseCode]) {
+      const subjectNames = items.map((i) => i.subjectName).join('、');
+      map[baseCode] = {
+        title: `${subjectNames}等 ${items.length} 份作業`,
+        count: items.reduce((acc, it) => acc + it.count, 0),
+      };
     }
-    return result;
-  } catch (err) {
-    console.warn('fetchActiveHomeworkMap error:', err);
-    return {};
-  }
+  });
+
+  return map;
 }
 
 /**

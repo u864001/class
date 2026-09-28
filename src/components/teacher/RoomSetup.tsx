@@ -1,7 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { School, CheckSquare, Square, Loader2, Sparkles, BookOpen, Radio } from 'lucide-react';
 import { fetchRoster, formatClassLabel } from '../../lib/rosterApi';
-import { FIXED_ROOM_PRESETS, WUTAI_PRESETS, LIGU_PRESETS } from '../../lib/homeworkApi';
+import {
+  FIXED_ROOM_PRESETS,
+  WUTAI_PRESETS,
+  LIGU_PRESETS,
+  SUBJECT_PRESETS,
+  getSubjectsForGrade,
+  parseRoomCode,
+} from '../../lib/homeworkApi';
 import { supabase } from '../../lib/supabase';
 import { useI18n } from '../../context/I18nContext';
 
@@ -22,8 +29,9 @@ export const RoomSetup: React.FC<RoomSetupProps> = ({ onRoomCreated }) => {
 
   // Homework Fixed Room settings
   const [campusTab, setCampusTab] = useState<'wutai' | 'ligu' | 'custom'>('wutai');
-  const [fixedRoomCode, setFixedRoomCode] = useState('WT0601');
   const [selectedPreset, setSelectedPreset] = useState<string>('WT0601');
+  const [selectedSubject, setSelectedSubject] = useState<string>('CH');
+  const [fixedRoomCode, setFixedRoomCode] = useState('WT0601CH');
 
   const [creating, setCreating] = useState(false);
 
@@ -57,11 +65,28 @@ export const RoomSetup: React.FC<RoomSetupProps> = ({ onRoomCreated }) => {
     );
   };
 
-  const handleSelectPreset = (preset: typeof FIXED_ROOM_PRESETS[0]) => {
+  const currentPreset = FIXED_ROOM_PRESETS.find((p) => p.code === selectedPreset);
+  const availableSubjects = getSubjectsForGrade(currentPreset?.grade);
+  const parsedCurrentRoom = parseRoomCode(fixedRoomCode);
+
+  const handleSelectPreset = (preset: typeof FIXED_ROOM_PRESETS[0], subCode?: string) => {
+    const allowed = getSubjectsForGrade(preset.grade);
+    let sub = subCode !== undefined ? subCode : selectedSubject;
+    if (!allowed.some((s) => s.code === sub)) {
+      sub = allowed[0]?.code || 'CH';
+    }
+    setSelectedSubject(sub);
     setSelectedPreset(preset.code);
-    setFixedRoomCode(preset.code);
+    setFixedRoomCode(`${preset.code}${sub}`);
     setSelectedClasses([preset.classKey]);
     setCustomMode(false);
+  };
+
+  const handleSelectSubject = (subCode: string) => {
+    setSelectedSubject(subCode);
+    if (selectedPreset) {
+      setFixedRoomCode(`${selectedPreset}${subCode}`);
+    }
   };
 
   const handleCreateRoom = async () => {
@@ -326,11 +351,73 @@ export const RoomSetup: React.FC<RoomSetupProps> = ({ onRoomCreated }) => {
                 </div>
               )}
 
+              {campusTab !== 'custom' && (
+                <>
+                  {/* Subject Selector Pills */}
+                  <div className="space-y-2 pt-2 border-t border-slate-200/60 dark:border-slate-700">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-slate-700 dark:text-slate-200 text-xs">
+                        選擇作業科目 (避免多科同日撞房)：
+                      </span>
+                      <span className="text-[11px] text-slate-400 font-mono">
+                        代碼後綴: +{selectedSubject}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {availableSubjects.map((sub) => {
+                        const isSubSelected = selectedSubject === sub.code;
+                        return (
+                          <button
+                            key={sub.code}
+                            type="button"
+                            onClick={() => handleSelectSubject(sub.code)}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 border ${
+                              isSubSelected
+                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm scale-105'
+                                : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-300'
+                            }`}
+                          >
+                            <span>{sub.icon}</span>
+                            <span>{sub.name}</span>
+                            <span className="text-[10px] opacity-75 font-mono">({sub.code})</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Live Room Code & Class Preview Card */}
+                  <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 space-y-1.5 shadow-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                        固定作業教室預覽
+                      </span>
+                      <span className="font-mono font-black text-theme text-xs px-2.5 py-0.5 rounded-lg badge-theme">
+                        {fixedRoomCode}
+                      </span>
+                    </div>
+                    <div className="text-sm font-black text-slate-800 dark:text-slate-100 flex items-center space-x-2">
+                      <span>{parsedCurrentRoom.displayLabel}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      💡 自動綁定名冊，學生進入直接點選座號姓名；出新作業時若同科目已有舊作業，系統會貼心提醒並可一鍵覆蓋或封存。
+                    </p>
+                  </div>
+                </>
+              )}
+
               {campusTab === 'custom' && (
                 <div className="space-y-3 pt-1">
+                  <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-200 leading-relaxed">
+                    💡 <strong>混齡社團 / 跨班課後班模式：</strong>
+                    <br />
+                    在此自訂專屬代碼（如 <code className="font-mono bg-amber-100 dark:bg-amber-900 px-1 rounded">CLUB01</code>、<code className="font-mono bg-amber-100 dark:bg-amber-900 px-1 rounded">CARE01</code>），並於下方<strong>複選多個班級</strong>（例如同時勾選三甲與四甲）。
+                    系統會智慧整合跨班學生名單，學生進入時可依所屬班級點選座號姓名，作答與統計互不干擾！
+                  </div>
+
                   <div>
                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
-                      科任自訂教室代碼 (例如 NAT01, ENG02)：
+                      科任 / 社團自訂教室代碼 (例如 CLUB01, ENG02)：
                     </label>
                     <input
                       type="text"
@@ -339,16 +426,21 @@ export const RoomSetup: React.FC<RoomSetupProps> = ({ onRoomCreated }) => {
                         setFixedRoomCode(e.target.value.toUpperCase());
                         setSelectedPreset('');
                       }}
-                      placeholder="例如：NAT01"
+                      placeholder="例如：CLUB01"
                       className="w-full px-4 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 font-mono font-bold tracking-widest outline-none text-center"
                     />
                   </div>
 
                   <div>
-                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400 block mb-1">
-                      指派作答班級名單：
-                    </span>
-                    <div className="grid grid-cols-2 gap-2 max-h-36 overflow-y-auto">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                        指派作答班級名單（可複選多個班級組成混齡名單）：
+                      </span>
+                      <span className="text-[11px] text-theme font-bold">
+                        已選 {selectedClasses.length} 班
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 max-h-44 overflow-y-auto">
                       {rosterClasses.map((clsKey) => {
                         const isSelected = selectedClasses.includes(clsKey);
                         return (
@@ -356,27 +448,19 @@ export const RoomSetup: React.FC<RoomSetupProps> = ({ onRoomCreated }) => {
                             key={clsKey}
                             type="button"
                             onClick={() => toggleClass(clsKey)}
-                            className={`flex items-center space-x-2 px-3 py-2 rounded-xl border text-xs font-medium transition text-left ${
+                            className={`flex items-center justify-between px-3 py-2 rounded-xl border text-xs font-medium transition text-left ${
                               isSelected
-                                ? 'badge-theme border-current font-bold'
+                                ? 'badge-theme border-current font-bold shadow-xs'
                                 : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
                             }`}
                           >
                             <span>{formatClassLabel(clsKey, true)}</span>
+                            {isSelected && <CheckSquare className="w-3.5 h-3.5 text-theme flex-shrink-0" />}
                           </button>
                         );
                       })}
                     </div>
                   </div>
-                </div>
-              )}
-
-              {campusTab !== 'custom' && (
-                <div className="pt-2 text-xs flex items-center justify-between border-t border-slate-200/60 dark:border-slate-700">
-                  <span className="text-slate-400">目前選定班級代碼：</span>
-                  <span className="font-mono font-bold text-theme bg-white dark:bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700">
-                    {fixedRoomCode}
-                  </span>
                 </div>
               )}
             </div>

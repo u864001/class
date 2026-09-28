@@ -26,6 +26,7 @@ import {
   unlockStudentHomework,
   LOCK_ROUND_ID,
   LockMetadata,
+  parseRoomCode,
 } from '../../../lib/homeworkApi';
 import { fetchRoster, formatClassLabel } from '../../../lib/rosterApi';
 import { exportRoomResults } from '../../../lib/exportExcel';
@@ -47,6 +48,7 @@ export const HomeworkReview: React.FC<HomeworkReviewProps> = ({
 
   const hwData = useMemo(() => parseHomework(room.question_note), [room.question_note]);
   const questions = useMemo(() => hwData?.questions || [], [hwData]);
+  const parsedRoom = useMemo(() => parseRoomCode(room.id), [room.id]);
 
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loadingSubs, setLoadingSubs] = useState(true);
@@ -309,10 +311,12 @@ export const HomeworkReview: React.FC<HomeworkReviewProps> = ({
               <span className="px-3 py-1 rounded-full badge-theme text-xs font-bold font-mono">
                 {room.id}
               </span>
-              <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                {room.selected_classes?.length > 0
-                  ? room.selected_classes.map((cls) => formatClassLabel(cls, true)).join(', ')
-                  : '自訂座號'}
+              <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                {parsedRoom.isFixed ? parsedRoom.displayLabel : (
+                  room.selected_classes?.length > 0
+                    ? room.selected_classes.map((cls) => formatClassLabel(cls, true)).join(', ')
+                    : '自訂座號'
+                )}
               </span>
             </div>
             <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 mt-2">
@@ -668,6 +672,11 @@ export const HomeworkReview: React.FC<HomeworkReviewProps> = ({
                 >
                   <span className="flex items-center space-x-1.5 truncate pr-1">
                     <span>
+                      {room.selected_classes?.length > 1 && (
+                        <span className="opacity-70 mr-1 font-normal">
+                          [{formatClassLabel(`${s.grade}-${s.class}`, false)}]
+                        </span>
+                      )}
                       {s.number}號 {s.name}
                     </span>
                     {isLocked && (
@@ -710,6 +719,9 @@ export const HomeworkReview: React.FC<HomeworkReviewProps> = ({
                           {student?.name || '學生作答明細'}
                         </h3>
                         <span className="text-xs text-slate-400">
+                          {student && !room.custom_class_enabled
+                            ? `${formatClassLabel(`${student.grade}-${student.class}`, true)}・`
+                            : ''}
                           座號：{student?.number} 號
                         </span>
                       </div>
@@ -837,6 +849,9 @@ export const HomeworkReview: React.FC<HomeworkReviewProps> = ({
           <table className="w-full text-xs text-left">
             <thead>
               <tr className="border-b border-slate-200 dark:border-slate-700 text-slate-400 font-bold uppercase tracking-wider">
+                {room.selected_classes?.length > 1 && (
+                  <th className="pb-3 px-2">班級</th>
+                )}
                 <th className="pb-3 px-2">座號</th>
                 <th className="pb-3 px-2">姓名</th>
                 {questions.map((q) => (
@@ -858,6 +873,11 @@ export const HomeworkReview: React.FC<HomeworkReviewProps> = ({
 
                 return (
                   <tr key={sId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
+                    {room.selected_classes?.length > 1 && (
+                      <td className="py-2.5 px-2 font-medium text-slate-500 dark:text-slate-400">
+                        {formatClassLabel(`${s.grade}-${s.class}`, false)}
+                      </td>
+                    )}
                     <td className="py-2.5 px-2 font-mono font-bold text-slate-600 dark:text-slate-300">
                       {s.number}
                     </td>

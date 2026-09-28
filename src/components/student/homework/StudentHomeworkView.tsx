@@ -29,6 +29,7 @@ import {
   LOCK_ROUND_ID,
   LockMetadata,
   uploadStudentHomeworkImage,
+  parseRoomCode,
 } from '../../../lib/homeworkApi';
 import { supabase } from '../../../lib/supabase';
 import { StudentCanvas } from '../StudentCanvas';
@@ -48,6 +49,7 @@ export const StudentHomeworkView: React.FC<StudentHomeworkViewProps> = ({
   onLeave,
 }) => {
   const { t } = useI18n();
+  const parsedRoom = useMemo(() => parseRoomCode(roomId), [roomId]);
 
   const [loading, setLoading] = useState(true);
   const [room, setRoom] = useState<Room | null>(null);
@@ -414,6 +416,11 @@ export const StudentHomeworkView: React.FC<StudentHomeworkViewProps> = ({
               <span className="px-2.5 py-0.5 rounded-full badge-theme text-[11px] font-mono font-bold">
                 {roomId}
               </span>
+              {parsedRoom.isFixed && (
+                <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                  {parsedRoom.shortLabel}
+                </span>
+              )}
               <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
                 {studentName}
               </span>

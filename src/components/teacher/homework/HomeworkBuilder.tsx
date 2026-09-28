@@ -16,7 +16,7 @@ import {
   PenTool,
 } from 'lucide-react';
 import { Room, HomeworkQuestion, QuestionType } from '../../../types';
-import { serializeHomework, parseHomework } from '../../../lib/homeworkApi';
+import { serializeHomework, parseHomework, parseRoomCode } from '../../../lib/homeworkApi';
 import {
   isScreenCaptureSupported,
   captureAndUploadScreenSnapshot,
@@ -37,10 +37,15 @@ export const HomeworkBuilder: React.FC<HomeworkBuilderProps> = ({
 }) => {
   const { t } = useI18n();
 
+  const parsedRoom = parseRoomCode(room.id);
+  const defaultTitle = parsedRoom.isFixed && parsedRoom.subject
+    ? `${parsedRoom.shortLabel}作業`
+    : '課堂回家作業';
+
   // Load existing questions if editing
   const existingHw = parseHomework(room.question_note);
 
-  const [title, setTitle] = useState(existingHw?.title || '課堂回家作業');
+  const [title, setTitle] = useState(existingHw?.title || defaultTitle);
   const [questions, setQuestions] = useState<HomeworkQuestion[]>(
     existingHw?.questions && existingHw.questions.length > 0
       ? existingHw.questions
@@ -201,8 +206,8 @@ export const HomeworkBuilder: React.FC<HomeworkBuilderProps> = ({
               <span className="px-3 py-1 rounded-full badge-theme text-xs font-bold font-mono">
                 {room.id}
               </span>
-              <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                {t('homework.modeHomework')}
+              <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                {parsedRoom.isFixed ? parsedRoom.displayLabel : t('homework.modeHomework')}
               </span>
             </div>
             <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 mt-2">
