@@ -1,5 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { School, CheckSquare, Square, Loader2, Sparkles, BookOpen, Radio } from 'lucide-react';
+import {
+  School,
+  CheckSquare,
+  Square,
+  Loader2,
+  Sparkles,
+  BookOpen,
+  Radio,
+  AlertTriangle,
+  CheckCircle2,
+} from 'lucide-react';
 import { fetchRoster, formatClassLabel } from '../../lib/rosterApi';
 import {
   FIXED_ROOM_PRESETS,
@@ -8,6 +18,8 @@ import {
   SUBJECT_PRESETS,
   getSubjectsForGrade,
   parseRoomCode,
+  validateCustomRoomCode,
+  isReservedFixedCode,
 } from '../../lib/homeworkApi';
 import { supabase } from '../../lib/supabase';
 import { useI18n } from '../../context/I18nContext';
@@ -32,6 +44,7 @@ export const RoomSetup: React.FC<RoomSetupProps> = ({ onRoomCreated }) => {
   const [selectedPreset, setSelectedPreset] = useState<string>('WT0601');
   const [selectedSubject, setSelectedSubject] = useState<string>('CH');
   const [fixedRoomCode, setFixedRoomCode] = useState('WT0601CH');
+  const [customRoomCode, setCustomRoomCode] = useState('CLUB01');
 
   const [creating, setCreating] = useState(false);
 
@@ -68,6 +81,7 @@ export const RoomSetup: React.FC<RoomSetupProps> = ({ onRoomCreated }) => {
   const currentPreset = FIXED_ROOM_PRESETS.find((p) => p.code === selectedPreset);
   const availableSubjects = getSubjectsForGrade(currentPreset?.grade);
   const parsedCurrentRoom = parseRoomCode(fixedRoomCode);
+  const customValidation = validateCustomRoomCode(customRoomCode);
 
   const handleSelectPreset = (preset: typeof FIXED_ROOM_PRESETS[0], subCode?: string) => {
     const allowed = getSubjectsForGrade(preset.grade);
@@ -129,12 +143,27 @@ export const RoomSetup: React.FC<RoomSetupProps> = ({ onRoomCreated }) => {
         if (error) throw error;
         onRoomCreated(roomId);
       } else {
-        // --- 2. Homework Fixed Code Mode ---
-        const codeToUse = fixedRoomCode.trim().toUpperCase();
+        // --- 2. Homework Fixed or Custom Code Mode ---
+        const codeToUse = (campusTab === 'custom' ? customRoomCode : fixedRoomCode).trim().toUpperCase();
         if (!codeToUse) {
-          alert('請輸入或選擇固定教室代碼！');
+          alert('請輸入或選擇教室代碼！');
           setCreating(false);
           return;
+        }
+
+        if (campusTab === 'custom') {
+          const validation = validateCustomRoomCode(codeToUse);
+          if (!validation.valid) {
+            alert(`❌ 自訂教室代碼衝突或格式不符：\n\n${validation.error}\n\n固定班級及其科目組合均為系統保留專用碼，請更換自訂代碼（例如 CLUB01, CARE01 等）。`);
+            setCreating(false);
+            return;
+          }
+
+          if (selectedClasses.length === 0) {
+            alert('請至少勾選一個作答班級名單！');
+            setCreating(false);
+            return;
+          }
         }
 
         // Check if room already exists in Supabase
@@ -145,15 +174,35 @@ export const RoomSetup: React.FC<RoomSetupProps> = ({ onRoomCreated }) => {
           .single();
 
         if (existingRoom) {
-          // If room exists, verify or update teacher name if needed
+          // If room exists and is used by another teacher in custom mode:
+          if (
+            campusTab === 'custom' &&
+            existingRoom.teacher_name &&
+            existingRoom.teacher_name.trim() !== teacherName.trim()
+          ) {
+            const confirmTakeover = window.confirm(
+              `⚠️ 教室代碼「${codeToUse}」目前已由「${existingRoom.teacher_name}」老師建立並使用中。\n\n` +
+              `您確定要進入或共用此社團/跨班教室嗎？\n` +
+              `（若為不同課程，建議按下「取消」並更換代碼，例如 ${codeToUse}2）`
+            );
+            if (!confirmTakeover) {
+              setCreating(false);
+              return;
+            }
+          }
+
+          // If room exists, verify or update teacher name and selected classes if needed
           await supabase
             .from('rooms')
-            .update({ teacher_name: teacherName.trim() })
+            .update({
+              teacher_name: teacherName.trim(),
+              ...(campusTab === 'custom' ? { selected_classes: selectedClasses } : {}),
+            })
             .eq('id', codeToUse);
 
           onRoomCreated(codeToUse);
         } else {
-          // Create new fixed room in homework_prep status
+          // Create new fixed or custom room in homework_prep status
           const { error } = await supabase.from('rooms').insert({
             id: codeToUse,
             teacher_name: teacherName.trim(),
@@ -162,8 +211,8 @@ export const RoomSetup: React.FC<RoomSetupProps> = ({ onRoomCreated }) => {
             question_type: 'choice',
             question_score: 2,
             timer_seconds: 20,
-            custom_class_enabled: customMode,
-            custom_student_count: customCount,
+            custom_class_enabled: false,
+            custom_student_count: 0,
             selected_classes: selectedClasses,
             cumulative_scores: {},
             groups: ['第 1 組', '第 2 組', '第 3 組', '第 4 組'],
@@ -421,14 +470,42 @@ export const RoomSetup: React.FC<RoomSetupProps> = ({ onRoomCreated }) => {
                     </label>
                     <input
                       type="text"
-                      value={fixedRoomCode}
-                      onChange={(e) => {
-                        setFixedRoomCode(e.target.value.toUpperCase());
-                        setSelectedPreset('');
-                      }}
+                      value={customRoomCode}
+                      onChange={(e) => setCustomRoomCode(e.target.value.toUpperCase().replace(/\s+/g, ''))}
                       placeholder="例如：CLUB01"
-                      className="w-full px-4 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 font-mono font-bold tracking-widest outline-none text-center"
+                      className={`w-full px-4 py-2.5 rounded-xl bg-white dark:bg-slate-800 border text-slate-800 dark:text-slate-100 font-mono font-bold tracking-widest outline-none text-center transition ${
+                        !customValidation.valid
+                          ? 'border-rose-400 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20'
+                          : 'border-emerald-500 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20'
+                      }`}
                     />
+                    {/* Real-time Conflict & Format Feedback */}
+                    <div className="mt-2">
+                      {!customValidation.valid ? (
+                        <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-xs text-rose-800 dark:text-rose-200 flex items-start space-x-2 animate-in fade-in">
+                          <AlertTriangle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
+                          <div className="space-y-1">
+                            <div className="font-bold flex items-center space-x-1.5">
+                              <span>代碼衝突 / 不可使用</span>
+                            </div>
+                            <p className="text-[11px] leading-relaxed">{customValidation.error}</p>
+                            <p className="text-[10px] text-rose-600 dark:text-rose-300 opacity-90">
+                              💡 全校所有固定班級及科目後綴（如 WT0601, WT0601CH, LG0202 等）為保留專用碼，請至「霧臺校區」或「勵古校區」分頁選取。社團跨班建議使用如：<code>CLUB01</code>、<code>CARE01</code>、<code>ROBOT</code> 等代碼。
+                            </p>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-800 dark:text-emerald-300 flex items-center justify-between animate-in fade-in">
+                          <div className="flex items-center space-x-2">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                            <span>自訂代碼 <strong>{customRoomCode}</strong> 有效且無衝突</span>
+                          </div>
+                          <span className="font-mono text-[10px] text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/60 px-2 py-0.5 rounded-full font-bold">
+                            社團/跨班可用
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div>
@@ -550,7 +627,10 @@ export const RoomSetup: React.FC<RoomSetupProps> = ({ onRoomCreated }) => {
           {/* Submit Button */}
           <button
             onClick={handleCreateRoom}
-            disabled={creating}
+            disabled={
+              creating ||
+              (sessionMode === 'homework' && campusTab === 'custom' && !customValidation.valid)
+            }
             className="w-full py-4 rounded-2xl btn-theme-primary active:scale-[0.99] font-bold text-base transition flex items-center justify-center space-x-2 disabled:opacity-50"
           >
             {creating ? (
@@ -561,7 +641,11 @@ export const RoomSetup: React.FC<RoomSetupProps> = ({ onRoomCreated }) => {
             ) : sessionMode === 'homework' ? (
               <>
                 <BookOpen className="w-5 h-5" />
-                <span>進入固定教室作業管理 ({fixedRoomCode})</span>
+                <span>
+                  {campusTab === 'custom'
+                    ? `進入社團自訂教室作業管理 (${customRoomCode || '未輸入'})`
+                    : `進入固定教室作業管理 (${fixedRoomCode})`}
+                </span>
               </>
             ) : (
               <>

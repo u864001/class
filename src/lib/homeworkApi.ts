@@ -215,7 +215,116 @@ export function parseRoomCode(rawRoomId: string): ParsedRoomCode {
   };
 }
 
+export interface ReservedCheckResult {
+  isReserved: boolean;
+  reason?: string;
+  matchedPreset?: FixedRoomPreset;
+  matchedSubject?: SubjectPreset;
+}
+
 /**
+ * 檢查自訂教室代碼是否與全校固定班級代碼或其科目後綴組合衝突。
+ * 規則包含：
+ * 1. 任何 WT/LG 開頭 + 4 位數字班級碼 (如 WT0601, LG0202)
+ * 2. 任何上述固定代碼 + 2 位英文字母科目後綴 (如 WT0601CH, LG0202EN, WT0101MA 等)
+ * 3. 任何符合校區保留正規表示式 /^(WT|LG)\d{4}([A-Z]{2})?$/i 的代碼
+ * 4. 所有 FIXED_ROOM_PRESETS 與 SUBJECT_PRESETS 的任何組合
+ */
+export function isReservedFixedCode(rawCode: string): ReservedCheckResult {
+  const clean = (rawCode || '').trim().toUpperCase();
+  if (!clean) return { isReserved: false };
+
+  // 1. 正規表示式檢查：任何 WT / LG 開頭 + 4 位數字 + 選填 2 位英文字母
+  const campusRegex = /^(WT|LG)(\d{2})(\d{2})([A-Z]{2})?$/;
+  const match = clean.match(campusRegex);
+
+  if (match) {
+    const baseCode = clean.slice(0, 6);
+    const subCode = clean.length > 6 ? clean.slice(6) : undefined;
+    const preset = FIXED_ROOM_PRESETS.find((p) => p.code === baseCode);
+    const subject = SUBJECT_PRESETS.find((s) => s.code === subCode);
+
+    let reason = '此代碼符合校區固定班級代碼格式，為全校保留專用代碼';
+    if (preset && subject) {
+      reason = `此代碼為「${preset.campusName} ${preset.grade}年${preset.className === '1' ? '甲' : '乙'}班 - ${subject.name}」(${clean}) 專屬作業房號`;
+    } else if (preset) {
+      reason = `此代碼為「${preset.fullLabel}」(${clean}) 專屬固定班級房號`;
+    } else {
+      reason = `以 WT 或 LG 開頭搭配 4 位數字之編碼為學校官方校區保留格式 (${clean})`;
+    }
+
+    return {
+      isReserved: true,
+      reason,
+      matchedPreset: preset,
+      matchedSubject: subject,
+    };
+  }
+
+  // 2. 比對所有預設班級代碼
+  const directPreset = FIXED_ROOM_PRESETS.find((p) => p.code === clean);
+  if (directPreset) {
+    return {
+      isReserved: true,
+      reason: `此代碼為「${directPreset.fullLabel}」專屬保留代碼`,
+      matchedPreset: directPreset,
+    };
+  }
+
+  // 3. 比對所有預設班級 + 科目組合
+  for (const p of FIXED_ROOM_PRESETS) {
+    for (const s of SUBJECT_PRESETS) {
+      if (clean === `${p.code}${s.code}`) {
+        return {
+          isReserved: true,
+          reason: `此代碼為「${p.campusName} ${p.grade}年${p.className === '1' ? '甲' : '乙'}班 - ${s.name}」專用保留代碼`,
+          matchedPreset: p,
+          matchedSubject: s,
+        };
+      }
+    }
+  }
+
+  return { isReserved: false };
+}
+
+/**
+ * 驗證教師自訂社團 / 混齡跨班之教室代碼格式與衝突狀態
+ */
+export function validateCustomRoomCode(rawCode: string): { valid: boolean; error?: string } {
+  const clean = (rawCode || '').trim().toUpperCase();
+  if (!clean) {
+    return { valid: false, error: '請輸入社團/自訂教室代碼' };
+  }
+  if (clean.length < 3) {
+    return { valid: false, error: '代碼長度至少需 3 個字元（例如 CLUB01）' };
+  }
+  if (clean.length > 12) {
+    return { valid: false, error: '代碼長度不能超過 12 個字元' };
+  }
+  if (!/^[A-Z0-9_-]+$/.test(clean)) {
+    return { valid: false, error: '代碼僅允許英文字母、數字、減號 (-) 與底線 (_)' };
+  }
+
+  const reserved = isReservedFixedCode(clean);
+  if (reserved.isReserved) {
+    return {
+      valid: false,
+      error: reserved.reason || '此代碼為全校保留之固定班級/科目代碼，不可作為自訂代碼！',
+    };
+  }
+
+  // 避免以校區縮寫 (WT/LG) 加數字開頭，防止與校區固定班級混淆
+  if (/^(WT|LG)\d+/i.test(clean)) {
+    return {
+      valid: false,
+      error: `代碼「${clean}」以校區縮寫 (WT/LG) 加數字開頭，易與校區固定班級混淆。社團請改用如 CLUB01、CARE01、ROBOT 等代碼`,
+    };
+  }
+
+  return { valid: true };
+}
+
 /**
  * 序列化作業題目為 JSON 字串存入 rooms 表之 question_note
  * 每次作業均附帶唯一的 assignment_id，實現跨次作業徹底隔離
