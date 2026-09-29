@@ -116,7 +116,13 @@ export const StudentHomeworkView: React.FC<StudentHomeworkViewProps> = ({
 
         const asgId = parsed.assignment_id || 'ASG_DEFAULT';
         setAssignmentId(asgId);
-        setQuestions(parsed.questions);
+
+        // Strip correctAnswer from questions to prevent leaking standard answers to student client
+        const sanitizedQuestions = parsed.questions.map((q) => {
+          const { correctAnswer, ...rest } = q;
+          return rest as HomeworkQuestion;
+        });
+        setQuestions(sanitizedQuestions);
         setHwTitle(parsed.title || '課堂回家作業');
 
         // 2. Fetch existing submissions for this student
@@ -126,10 +132,10 @@ export const StudentHomeworkView: React.FC<StudentHomeworkViewProps> = ({
           .eq('room_id', cleanRoomId)
           .eq('student_id', studentId);
 
-        if (subsData && subsData.length > 0) {
-          const loadedAnswers: typeof answers = {};
-          const lockRoundId = `${asgId}_LOCK`;
+        const loadedAnswers: typeof answers = {};
+        const lockRoundId = `${asgId}_LOCK`;
 
+        if (subsData && subsData.length > 0) {
           for (const sub of subsData as Submission[]) {
             if (sub.round_id === lockRoundId || sub.round_id === LOCK_ROUND_ID) {
               setIsLocked(true);
@@ -149,8 +155,29 @@ export const StudentHomeworkView: React.FC<StudentHomeworkViewProps> = ({
               submittedAt: sub.created_at,
             };
           }
-          setAnswers(loadedAnswers);
         }
+
+        // Restore unsubmitted local drafts (choice, text) from localStorage if available
+        try {
+          const draftKey = `hw_draft_${cleanRoomId}_${asgId}_${studentId}`;
+          const draftRaw = localStorage.getItem(draftKey);
+          if (draftRaw) {
+            const draft = JSON.parse(draftRaw);
+            Object.entries(draft).forEach(([qId, dAns]: [string, any]) => {
+              if (!loadedAnswers[qId]?.submittedAt) {
+                loadedAnswers[qId] = {
+                  ...loadedAnswers[qId],
+                  choice: dAns.choice ?? loadedAnswers[qId]?.choice,
+                  text: dAns.text ?? loadedAnswers[qId]?.text,
+                };
+              }
+            });
+          }
+        } catch {
+          // ignore
+        }
+
+        setAnswers(loadedAnswers);
       } catch (err) {
         console.error('Failed to load homework:', err);
       } finally {
@@ -198,6 +225,11 @@ export const StudentHomeworkView: React.FC<StudentHomeworkViewProps> = ({
       if (!res.success) throw new Error(res.error || '鎖定失敗');
 
       setIsLocked(true);
+      try {
+        localStorage.removeItem(`hw_draft_${roomId}_${assignmentId}_${studentId}`);
+      } catch {
+        // ignore
+      }
       setShowIdentityConfirmModal(false);
       setShowFinishedModal(false);
       alert(t('homework.lockedSuccess'));
@@ -207,6 +239,28 @@ export const StudentHomeworkView: React.FC<StudentHomeworkViewProps> = ({
       setLocking(false);
     }
   };
+
+  // Auto-save unsubmitted drafts (choice, text) to localStorage to protect student work against iPad sleep / reload
+  useEffect(() => {
+    if (!assignmentId || !studentId || isLocked || loading) return;
+    try {
+      const draftKey = `hw_draft_${roomId}_${assignmentId}_${studentId}`;
+      const unsubmitted: Record<string, { choice?: string; text?: string }> = {};
+      Object.entries(answers).forEach(([qId, ans]) => {
+        if (!ans.submittedAt && (ans.choice || ans.text)) {
+          unsubmitted[qId] = {
+            choice: ans.choice,
+            text: ans.text,
+          };
+        }
+      });
+      if (Object.keys(unsubmitted).length > 0) {
+        localStorage.setItem(draftKey, JSON.stringify(unsubmitted));
+      }
+    } catch {
+      // ignore
+    }
+  }, [answers, roomId, assignmentId, studentId, isLocked, loading]);
 
   const currentQ = questions[currentIdx];
   const currentAnswer = currentQ ? answers[currentQ.id] : undefined;
@@ -338,13 +392,8 @@ export const StudentHomeworkView: React.FC<StudentHomeworkViewProps> = ({
         );
       }
 
-      // Check auto-grade score for choice questions if teacher configured standard answer
-      let earnedScore = 0;
-      if (currentQ.type === 'choice' && currentQ.correctAnswer) {
-        earnedScore = ans?.choice === currentQ.correctAnswer ? currentQ.score : 0;
-      }
-
       // Upsert into Supabase submissions table
+      // Note: Choice score is evaluated on teacher side to prevent leaking standard answers to student client.
       const { error } = await supabase.from('submissions').upsert(
         {
           room_id: cleanRoomId,
@@ -354,7 +403,7 @@ export const StudentHomeworkView: React.FC<StudentHomeworkViewProps> = ({
           choice: ans?.choice || null,
           text_answer: ans?.text?.trim() || null,
           image_url: finalImageUrl,
-          earned_score: earnedScore,
+          earned_score: 0,
         },
         {
           onConflict: 'room_id,round_id,student_id',
@@ -362,6 +411,23 @@ export const StudentHomeworkView: React.FC<StudentHomeworkViewProps> = ({
       );
 
       if (error) throw error;
+
+      // Clear draft for current question from localStorage
+      try {
+        const draftKey = `hw_draft_${cleanRoomId}_${assignmentId}_${studentId}`;
+        const draftRaw = localStorage.getItem(draftKey);
+        if (draftRaw) {
+          const draft = JSON.parse(draftRaw);
+          delete draft[currentQ.id];
+          if (Object.keys(draft).length > 0) {
+            localStorage.setItem(draftKey, JSON.stringify(draft));
+          } else {
+            localStorage.removeItem(draftKey);
+          }
+        }
+      } catch {
+        // ignore
+      }
 
       // Update local state with submittedAt timestamp
       const nowIso = new Date().toISOString();

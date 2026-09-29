@@ -32,15 +32,42 @@ export async function exportRoomResults(
     console.warn('Could not fetch all room submissions, using fallback:', err);
   }
 
+  // Check if room is in homework mode
+  const hwData = parseHomework(room.question_note);
+  const qMap = new Map(hwData?.questions?.map((q) => [q.id, q]));
+
   // 2. Prepare Sheet 1: Leaderboard / Total Scores
   const studentTotals: Record<string, { id: string; name: string; totalScore: number }> = {};
-  for (const [id, score] of Object.entries(room.cumulative_scores || {})) {
-    const sub = allSubmissions.find((s) => s.student_id === id);
-    studentTotals[id] = {
-      id,
-      name: sub?.student_name || id,
-      totalScore: score,
-    };
+
+  if (hwData) {
+    // Homework Mode: Calculate authoritative total scores from submissions and standard answers
+    for (const sub of allSubmissions) {
+      if (sub.round_id === 'HW_FINAL_LOCK' || sub.round_id.endsWith('_LOCK')) continue;
+      const qInfo = qMap.get(sub.round_id);
+      const isChoice = qInfo?.type === 'choice' && qInfo.correctAnswer;
+      const earned = isChoice
+        ? (sub.choice === qInfo.correctAnswer ? qInfo.score : 0)
+        : (sub.earned_score || 0);
+
+      if (!studentTotals[sub.student_id]) {
+        studentTotals[sub.student_id] = {
+          id: sub.student_id,
+          name: sub.student_name,
+          totalScore: 0,
+        };
+      }
+      studentTotals[sub.student_id].totalScore += earned;
+    }
+  } else {
+    // Live Classroom Mode: Use cumulative scores
+    for (const [id, score] of Object.entries(room.cumulative_scores || {})) {
+      const sub = allSubmissions.find((s) => s.student_id === id);
+      studentTotals[id] = {
+        id,
+        name: sub?.student_name || id,
+        totalScore: score,
+      };
+    }
   }
 
   const leaderboardData = Object.values(studentTotals)
@@ -52,15 +79,16 @@ export async function exportRoomResults(
       累積總得分_Score: item.totalScore,
     }));
 
-  // Check if room is in homework mode
-  const hwData = parseHomework(room.question_note);
-  const qMap = new Map(hwData?.questions?.map((q) => [q.id, q]));
-
   // 3. Prepare Sheet 2: Submissions Details (exclude lock control records)
   const submissionData = allSubmissions
     .filter((sub) => sub.round_id !== 'HW_FINAL_LOCK' && !sub.round_id.endsWith('_LOCK'))
     .map((sub, idx) => {
       const qInfo = qMap.get(sub.round_id);
+      const isChoice = qInfo?.type === 'choice' && qInfo.correctAnswer;
+      const earnedScore = isChoice
+        ? (sub.choice === qInfo.correctAnswer ? qInfo.score : 0)
+        : (sub.earned_score || 0);
+
       return {
         編號_No: idx + 1,
         題目編號_Question: qInfo ? `第 ${qInfo.num} 題 (${qInfo.type})` : sub.round_id,
@@ -70,7 +98,7 @@ export async function exportRoomResults(
         選擇題作答_Choice: sub.choice || '',
         問答文字_Text: sub.text_answer || '',
         作品圖片網址_ImageUrl: sub.image_url || '',
-        本題得分_EarnedScore: sub.earned_score || 0,
+        本題得分_EarnedScore: earnedScore,
         繳交時間_Time: new Date(sub.created_at).toLocaleString(),
       };
     });
