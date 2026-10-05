@@ -1,0 +1,23 @@
+name: ClassQnA Supabase & Vercel Automated Keepalive Heartbeat
+
+on:
+  schedule:
+    # 每 2 天早上 03:00 UTC (台灣時間 11:00) 自動發送雙軌保活心跳
+    - cron: '0 3 */2 * *'
+  workflow_dispatch:
+
+jobs:
+  heartbeat:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Vercel Keepalive API
+        run: |
+          echo "Pinging Vercel Keepalive API..."
+          curl -sS -i --max-time 15 "https://classqna.vercel.app/api/keepalive" || true
+
+      - name: Ping Supabase Database REST Gateway Directly
+        run: |
+          echo "Pinging Supabase REST Gateway directly..."
+          curl -sS -i --max-time 15 \
+            "https://mmvxgenubpvzopshuvpl.supabase.co/rest/v1/rooms?select=id&limit=1" \
+            -H "apikey: ${{ secrets.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1tdnhnZW51YnB2em9wc2h1dnBsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAwMzYxODAsImV4cCI6MjEwNTYxMjE4MH0.eQuUMJzYTbOP1oSfaAbMCfPIwb9GwWC7kxTB0gFQXEI' }}" || true
