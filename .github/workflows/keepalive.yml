@@ -2,8 +2,8 @@ name: ClassQnA Supabase & Vercel Automated Keepalive Heartbeat
 
 on:
   schedule:
-    # 每 2 天早上 03:00 UTC (台灣時間 11:00) 自動發送雙軌保活心跳
-    - cron: '0 3 */2 * *'
+    # 每天早晚固定各發送一次保活心跳 (UTC 01:00 與 13:00，即台灣時間 09:00 與 21:00)
+    - cron: '0 1,13 * * *'
   workflow_dispatch:
 
 jobs:
